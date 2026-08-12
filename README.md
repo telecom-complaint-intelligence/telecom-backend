@@ -77,32 +77,55 @@ main        → production-ready, protected, deploy-only
 
 ## 💻 Commands (run from repo root: `telecom-backend/`)
 
-```bash
-# create & activate virtual environment
-python -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
+### 🛠️ Installing `uv` (if not present)
 
-# install dependencies
-pip install -r requirements.txt
+You must install `uv` before setting up the project:
+
+- **macOS/Linux**:
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  # Or via Homebrew:
+  brew install uv
+  ```
+- **Windows**:
+  ```powershell
+  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+  # Or via winget:
+  winget install --id Astral.uv
+  ```
+
+*Restart your terminal after installation.*
+
+### 🚀 Setup & Development
+
+```bash
+# create virtual environment and install dependencies
+uv sync
+
+# activate virtual environment (optional, uv run handles execution automatically)
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+
+# add a dependency
+uv add <package_name>
 
 # run local dev server
-uvicorn app.main:app --reload     # http://localhost:8000
-                                   # docs at /docs (Swagger)
+uv run uvicorn app.main:app --reload     # http://localhost:8000
+                                         # docs at /docs (Swagger)
 
 # run DB migrations
-alembic upgrade head
+uv run alembic upgrade head
 
 # create a new migration after model changes
-alembic revision --autogenerate -m "describe the change"
+uv run alembic revision --autogenerate -m "describe the change"
 
 # lint
-flake8 app/                        # or ruff check app/
+uv run ruff check app/
 
 # run tests
-pytest
+uv run pytest
 
 # run with coverage
-pytest --cov=app
+uv run pytest --cov=app
 ```
 
 > All commands run from the **repo root**. If using Docker instead: `docker-compose up --build` runs backend + DB together — check `docker-compose.yml` for service names/ports.
@@ -113,7 +136,7 @@ pytest --cov=app
 
 - [ ] Confirm you're on the correct branch (`git branch`)
 - [ ] Pulled latest `dev`: `git pull origin dev`
-- [ ] `pip install -r requirements.txt` — dependencies may have changed
+- [ ] `uv sync` — dependencies may have changed
 - [ ] `.env` present and up to date (check `.env.example` for new variables — especially `AI_SERVICE_URL`, DB connection string)
 - [ ] `alembic upgrade head` — apply any new migrations before running the app
 - [ ] `uvicorn app.main:app --reload` — confirm it boots clean, hit `/docs` to sanity-check
@@ -123,7 +146,7 @@ pytest --cov=app
 
 ## Before You Push
 
-- [ ] Lint passes (`flake8 app/` or `ruff check app/`)
+- [ ] Lint passes (`uv run ruff check app/`)
 - [ ] `pytest` — all tests pass, added/updated tests for what changed
 - [ ] If you changed a model, migration generated (`alembic revision --autogenerate`) and included in the commit
 - [ ] No `print()` / debug leftovers
