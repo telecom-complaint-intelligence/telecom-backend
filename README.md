@@ -108,6 +108,10 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 # add a dependency
 uv add <package_name>
 
+# update/export requirements.txt to stay in sync with pyproject.toml / uv.lock
+# (Run this whenever you add/import a new package so requirements.txt is updated)
+uv export --no-hashes --output-file requirements.txt
+
 # run local dev server
 uv run uvicorn app.main:app --reload     # http://localhost:8000
                                          # docs at /docs (Swagger)
@@ -120,6 +124,8 @@ uv run alembic revision --autogenerate -m "describe the change"
 
 # lint
 uv run ruff check app/
+# autofix simple lint issues
+uv run ruff check app/ --fix
 
 # run tests
 uv run pytest
@@ -128,7 +134,20 @@ uv run pytest
 uv run pytest --cov=app
 ```
 
-> All commands run from the **repo root**. If using Docker instead: `docker-compose up --build` runs backend + DB together — check `docker-compose.yml` for service names/ports.
+### 🐳 Docker Commands
+
+If you prefer to run the application in Docker containers:
+
+```bash
+# Build the Docker image
+docker build -t telecom-backend .
+
+# Run the container individually
+docker run -p 8000:8000 --env-file .env telecom-backend
+
+# Build & Run via Docker Compose (backend + local environment)
+docker-compose up --build
+```
 
 ---
 
@@ -136,7 +155,7 @@ uv run pytest --cov=app
 
 - [ ] Confirm you're on the correct branch (`git branch`)
 - [ ] Pulled latest `dev`: `git pull origin dev`
-- [ ] `uv sync` — dependencies may have changed
+- [ ] `uv sync` (or `pip install -r requirements.txt`) — dependencies may have changed, run this to verify you haven't missed any dependencies added from the branch pull.
 - [ ] `.env` present and up to date (check `.env.example` for new variables — especially `AI_SERVICE_URL`, DB connection string)
 - [ ] `alembic upgrade head` — apply any new migrations before running the app
 - [ ] `uvicorn app.main:app --reload` — confirm it boots clean, hit `/docs` to sanity-check
@@ -148,6 +167,7 @@ uv run pytest --cov=app
 
 - [ ] Lint passes (`uv run ruff check app/`)
 - [ ] `pytest` — all tests pass, added/updated tests for what changed
+- [ ] Dependencies check: If any new import was added, verify it has been added to project dependencies (`uv add <package>`) and exported to requirements (`uv export --no-hashes --output-file requirements.txt`)
 - [ ] If you changed a model, migration generated (`alembic revision --autogenerate`) and included in the commit
 - [ ] No `print()` / debug leftovers
 - [ ] No secrets, API keys, DB passwords hardcoded or committed — everything through `.env`
