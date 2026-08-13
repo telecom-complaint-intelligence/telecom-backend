@@ -28,6 +28,7 @@
         ]
       }
     },
+
     {
       "type": "required_status_checks",
       "parameters": {

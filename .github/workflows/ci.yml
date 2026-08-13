@@ -20,6 +20,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Enforce dev -> main merge path
+        if: github.base_ref == 'main'
+        run: |
+          if [ "${{ github.head_ref }}" != "dev" ]; then
+            echo "ERROR: Merges to 'main' are only allowed from the 'dev' branch."
+            echo "Current source branch: ${{ github.head_ref }}"
+            exit 1
+          fi
+
       - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
@@ -34,8 +43,20 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
-      - name: Run lint
-        run: uv run ruff check app/
+      - name: Run lint and format checks
+        run: |
+          uv run ruff check app/
+          uv run ruff format --check app/
+
+      - name: Check Alembic migration heads
+        run: |
+          heads_count=$(uv run alembic heads | wc -l | xargs)
+          if [ "$heads_count" -gt 1 ]; then
+            echo "ERROR: Multiple Alembic migration heads detected!"
+            uv run alembic heads
+            exit 1
+          fi
+          echo "Success: $heads_count Alembic head(s) detected."
 
       - name: Run tests
         run: uv run pytest
