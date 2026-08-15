@@ -4,6 +4,44 @@ FastAPI backend for the Telecom Complaint Intelligence & Automated Resolution As
 
 ---
 
+## 🐳 Quick Start (Docker-Only Setup)
+
+You do **not** need to install Python, Uvicorn, or PostgreSQL on your local machine. You can run both the database and the backend application completely inside Docker containers.
+
+### 1. Configure Environment Variables
+Create a `.env` file in the root directory (`telecom-backend/`) using `.env.example` as a template:
+```bash
+cp .env.example .env
+```
+Open `.env` and fill in your details:
+* Google Client ID credentials
+* Google SMTP Relay configurations for real email OTP delivery
+
+### 2. Start the Backend & Database
+Build the images and start the services in the background or attached mode:
+```bash
+# Build and run the containers
+docker compose up --build
+
+# To run in detached mode (background)
+docker compose up -d --build
+```
+This single command automatically:
+1. Starts the PostgreSQL PGVector database container.
+2. Starts the FastAPI backend container.
+3. Waits for the database to accept connections.
+4. **Applies all database migrations (`alembic upgrade head`) automatically.**
+5. Starts the FastAPI application server at `http://localhost:8000`.
+
+*Access the Swagger API documentation directly at [http://localhost:8000/docs](http://localhost:8000/docs).*
+
+### 3. Stop the Environment
+```bash
+docker compose down
+```
+
+---
+
 ## 📁 Folder Structure
 
 ```
@@ -31,8 +69,6 @@ telecom-backend/
 | New DB schema change | generate via `alembic revision`, goes in `alembic/versions/` |
 | Test for an endpoint/service | `tests/` (mirror the source path) |
 
-Endpoints in `api/` should stay thin — validate input, call a `service`, return the response. Actual logic (talking to DB, calling AI service, computing priority) belongs in `services/`, not inline in the route handler. This keeps things testable and keeps 3 backend devs from stepping on each other inside giant route files.
-
 ---
 
 ## Branching Strategy
@@ -57,30 +93,14 @@ main        → production-ready, protected, deploy-only
 - Branch off `dev`, not `main`.
 - One branch = one feature/fix.
 - **Do not delete branches after merge** — this is a hackathon; the full branch history is part of showcasing individual contribution. Merge via PR, keep the branch.
-- Keep PR descriptions detailed (what was built, how tested, linked issue) — this is what's easiest to reference/screenshot later for showcase purposes.
-
-### Flow
-
-```
-1. git checkout dev
-2. git pull origin dev
-3. git checkout -b feature/<name>-<feature>
-4. ... code, commit ...
-5. git push origin feature/<name>-<feature>
-6. Open PR: feature/<name>-<feature> → dev
-7. Get 1 review approval + CI passing
-8. Merge (branch stays, not deleted)
-9. Periodically: dev → main (when stable, via PR)
-```
 
 ---
 
-## 💻 Commands (run from repo root: `telecom-backend/`)
+## 💻 Python Local Development Commands (Optional)
 
-### 🛠️ Installing `uv` (if not present)
+If you still wish to run or debug the server locally on your host machine using `uv`:
 
-You must install `uv` before setting up the project:
-
+### 🛠️ Installing `uv`
 - **macOS/Linux**:
   ```bash
   curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -90,31 +110,15 @@ You must install `uv` before setting up the project:
 - **Windows**:
   ```powershell
   powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-  # Or via winget:
-  winget install --id Astral.uv
   ```
 
-*Restart your terminal after installation.*
-
-### 🚀 Setup & Development
-
+### 🚀 Setup & Execution
 ```bash
 # create virtual environment and install dependencies
 uv sync
 
-# activate virtual environment (optional, uv run handles execution automatically)
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-
-# add a dependency
-uv add <package_name>
-
-# update/export requirements.txt to stay in sync with pyproject.toml / uv.lock
-# (Run this whenever you add/import a new package so requirements.txt is updated)
-uv export --no-hashes --output-file requirements.txt
-
 # run local dev server
-uv run uvicorn app.main:app --reload     # http://localhost:8000
-                                         # docs at /docs (Swagger)
+uv run uvicorn app.main:app --reload
 
 # run DB migrations
 uv run alembic upgrade head
@@ -122,64 +126,29 @@ uv run alembic upgrade head
 # create a new migration after model changes
 uv run alembic revision --autogenerate -m "describe the change"
 
-# lint
+# lint check code style
 uv run ruff check app/
-# autofix simple lint issues
-uv run ruff check app/ --fix
+uv run ruff format app/
 
 # run tests
 uv run pytest
-
-# run with coverage
-uv run pytest --cov=app
 ```
-
-### 🐳 Docker Commands
-
-If you prefer to run the application in Docker containers:
-
-```bash
-# Build the Docker image
-docker build -t telecom-backend .
-
-# Run the container individually
-docker run -p 8000:8000 --env-file .env telecom-backend
-
-# Build & Run via Docker Compose (backend + local environment)
-docker-compose up --build
-```
-
----
-
-## Before You Start Coding (after `git pull`)
-
-- [ ] Confirm you're on the correct branch (`git branch`)
-- [ ] Pulled latest `dev`: `git pull origin dev`
-- [ ] `uv sync` (or `pip install -r requirements.txt`) — dependencies may have changed, run this to verify you haven't missed any dependencies added from the branch pull.
-- [ ] `.env` present and up to date (check `.env.example` for new variables — especially `AI_SERVICE_URL`, DB connection string)
-- [ ] `alembic upgrade head` — apply any new migrations before running the app
-- [ ] `uvicorn app.main:app --reload` — confirm it boots clean, hit `/docs` to sanity-check
-- [ ] Check open PRs/issues board — avoid duplicate work on the same endpoint/model
 
 ---
 
 ## Before You Push
 
-- [ ] Lint passes (`uv run ruff check app/`)
-- [ ] `pytest` — all tests pass, added/updated tests for what changed
-- [ ] Dependencies check: If any new import was added, verify it has been added to project dependencies (`uv add <package>`) and exported to requirements (`uv export --no-hashes --output-file requirements.txt`)
-- [ ] If you changed a model, migration generated (`alembic revision --autogenerate`) and included in the commit
+- [ ] Lint & Format checks pass (`uv run ruff check app/` & `uv run ruff format app/`)
 - [ ] No `print()` / debug leftovers
 - [ ] No secrets, API keys, DB passwords hardcoded or committed — everything through `.env`
 - [ ] `.env.example` updated if you added a new required env var
-- [ ] Endpoint tested manually via `/docs` (Swagger) at least once
 - [ ] Branch up to date with latest `dev` — resolve conflicts locally
-- [ ] PR description filled: what changed, why, how tested, linked issue number
 
 ---
 
 ## Commit Message Convention
 
+Format: `<type>: <short description>` — one line, present tense, no trailing period.
 ```
 feat: add complaint priority endpoint
 fix: resolve JWT expiry not refreshing (#14)
@@ -187,5 +156,3 @@ chore: clean up unused alembic revisions
 refactor: move classification call into services layer
 docs: update README setup steps
 ```
-
-Format: `<type>: <short description>` — one line, present tense, no trailing period.
