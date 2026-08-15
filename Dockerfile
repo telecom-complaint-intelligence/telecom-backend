@@ -26,13 +26,19 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy virtual environment and app code from builder
+# Copy virtual environment, app code, alembic migrations, and startup script
 COPY --from=builder /app/.venv /app/.venv
 COPY app ./app
+COPY alembic ./alembic
+COPY alembic.ini ./alembic.ini
+COPY start.sh ./start.sh
+
+# Make start.sh executable
+RUN chmod +x start.sh
 
 # Use the virtual environment
 ENV PATH="/app/.venv/bin:$PATH"
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["./start.sh"]

@@ -19,11 +19,11 @@ services:
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
       - ENV=dev
       - DATABASE_URL=postgresql://postgres:password@db:5432/telecom_db
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
-      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
     volumes:
       - ./app:/app/app
     depends_on:
