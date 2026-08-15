@@ -1,6 +1,18 @@
 version: '3.8'
 
 services:
+  db:
+    image: ankane/pgvector:latest
+    restart: always
+    environment:
+      POSTGRES_DB: telecom_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
   backend:
     build:
       context: .
@@ -9,5 +21,13 @@ services:
       - "8000:8000"
     environment:
       - ENV=dev
+      - DATABASE_URL=postgresql://postgres:password@db:5432/telecom_db
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
     volumes:
       - ./app:/app/app
+    depends_on:
+      - db
+
+volumes:
+  pgdata:
