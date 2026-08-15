@@ -690,7 +690,11 @@ async def create_department(
         )
 
     # Check if department already exists
-    existing = db.query(Department).filter(Department.name == request.name, Department.is_archived == False).first()
+    existing = (
+        db.query(Department)
+        .filter(Department.name == request.name, Department.is_archived == False)
+        .first()
+    )
     if existing:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -717,7 +721,11 @@ async def invite_client(
         )
 
     # Check if user already exists
-    existing_user = db.query(User).filter(User.email == request.email, User.is_archived == False).first()
+    existing_user = (
+        db.query(User)
+        .filter(User.email == request.email, User.is_archived == False)
+        .first()
+    )
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -725,7 +733,11 @@ async def invite_client(
         )
 
     # Check if department exists
-    dept = db.query(Department).filter(Department.id == request.department_id, Department.is_archived == False).first()
+    dept = (
+        db.query(Department)
+        .filter(Department.id == request.department_id, Department.is_archived == False)
+        .first()
+    )
     if not dept:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -869,25 +881,33 @@ async def get_operators(email: str, db: Annotated[Session, Depends(get_db)]):
     if not current_user:
         return []
 
-    operators = db.query(User).filter(User.role == "client", User.is_archived == False).all()
-    is_master_admin = (current_user.email == "vaahee21@gmail.com")
+    operators = (
+        db.query(User).filter(User.role == "client", User.is_archived == False).all()
+    )
+    is_master_admin = current_user.email == "vaahee21@gmail.com"
 
     result = []
     for op in operators:
         # If not the master admin, restrict visibility to the same department
-        if not is_master_admin and current_user and current_user.department_id != op.department_id:
+        if (
+            not is_master_admin
+            and current_user
+            and current_user.department_id != op.department_id
+        ):
             continue
 
         name = op.profile.name if op.profile else op.email.split("@")[0].capitalize()
         dept_name = op.department.name if op.department else "Unmapped"
-        result.append({
-            "id": op.customer_id,
-            "name": name,
-            "email": op.email,
-            "department": dept_name,
-            "status": "Active" if op.email_verified else "Pending"
-        })
-    
+        result.append(
+            {
+                "id": op.customer_id,
+                "name": name,
+                "email": op.email,
+                "department": dept_name,
+                "status": "Active" if op.email_verified else "Pending",
+            }
+        )
+
     set_cached_data(cache_key, result, expire_seconds=300)
     return result
 
@@ -902,7 +922,11 @@ async def update_department(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the Master Client Admin can perform this action.",
         )
-    dept = db.query(Department).filter(Department.id == id, Department.is_archived == False).first()
+    dept = (
+        db.query(Department)
+        .filter(Department.id == id, Department.is_archived == False)
+        .first()
+    )
     if not dept:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -926,7 +950,11 @@ async def archive_department(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the Master Client Admin can perform this action.",
         )
-    dept = db.query(Department).filter(Department.id == id, Department.is_archived == False).first()
+    dept = (
+        db.query(Department)
+        .filter(Department.id == id, Department.is_archived == False)
+        .first()
+    )
     if not dept:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -950,7 +978,9 @@ async def update_operator(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the Master Client Admin can perform this action.",
         )
-    op = db.query(User).filter(User.customer_id == id, User.is_archived == False).first()
+    op = (
+        db.query(User).filter(User.customer_id == id, User.is_archived == False).first()
+    )
     if not op:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -973,7 +1003,9 @@ async def archive_operator(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the Master Client Admin can perform this action.",
         )
-    op = db.query(User).filter(User.customer_id == id, User.is_archived == False).first()
+    op = (
+        db.query(User).filter(User.customer_id == id, User.is_archived == False).first()
+    )
     if not op:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

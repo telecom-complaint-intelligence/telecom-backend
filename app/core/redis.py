@@ -9,10 +9,13 @@ load_dotenv()
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 try:
-    redis_client = redis.Redis.from_url(REDIS_URL, decode_responses=True, socket_connect_timeout=2)
+    redis_client = redis.Redis.from_url(
+        REDIS_URL, decode_responses=True, socket_connect_timeout=2
+    )
 except Exception as e:  # noqa: BLE001
     print(f"Warning: Failed to initialize Redis client: {e}")
     redis_client = None
+
 
 def get_cached_data(key: str):
     if not redis_client:
@@ -25,6 +28,7 @@ def get_cached_data(key: str):
         print(f"Redis cache GET warning for key '{key}': {e}")
     return None
 
+
 def set_cached_data(key: str, value: any, expire_seconds: int = 300):
     if not redis_client:
         return
@@ -32,6 +36,7 @@ def set_cached_data(key: str, value: any, expire_seconds: int = 300):
         redis_client.set(key, json.dumps(value), ex=expire_seconds)
     except Exception as e:  # noqa: BLE001
         print(f"Redis cache SET warning for key '{key}': {e}")
+
 
 def invalidate_cache(key: str):
     if not redis_client:
