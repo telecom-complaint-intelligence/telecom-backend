@@ -15,9 +15,9 @@ from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.redis import get_cached_data, invalidate_cache, set_cached_data
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.models.user import ClientInvitation, Department, Profile, ServiceDetails, User
-from app.core.redis import get_cached_data, set_cached_data, invalidate_cache
 
 load_dotenv()
 
@@ -875,9 +875,8 @@ async def get_operators(email: str, db: Annotated[Session, Depends(get_db)]):
     result = []
     for op in operators:
         # If not the master admin, restrict visibility to the same department
-        if not is_master_admin:
-            if current_user and current_user.department_id != op.department_id:
-                continue
+        if not is_master_admin and current_user and current_user.department_id != op.department_id:
+            continue
 
         name = op.profile.name if op.profile else op.email.split("@")[0].capitalize()
         dept_name = op.department.name if op.department else "Unmapped"
