@@ -13,9 +13,7 @@ DATABASE_URL = os.getenv(
 
 def create_db_engine():
     if DATABASE_URL.startswith("sqlite"):
-        return create_engine(
-            DATABASE_URL, connect_args={"check_same_thread": False}
-        )
+        return create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 
     try:
         pg_engine = create_engine(DATABASE_URL, pool_pre_ping=True)

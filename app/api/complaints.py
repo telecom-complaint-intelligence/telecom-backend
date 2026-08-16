@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
+from app.core.redis import get_cached_data, invalidate_cache, set_cached_data
 from app.core.security import get_current_user, get_optional_current_user
 from app.models.complaints import (
     Complaint,
@@ -37,16 +38,11 @@ def generate_ticket_number() -> str:
     return f"TICK-{random.randint(100000, 999999)}"
 
 
-def _build_complaint_response(
-    complaint: Complaint, db: Session
-) -> ComplaintResponse:
+def _build_complaint_response(complaint: Complaint, db: Session) -> ComplaintResponse:
     """Helper to assemble ComplaintResponse and compute resolved_address dynamically."""
     # 1. Determine resolved address based on filling_on_behalf_of
     resolved_addr = None
-    if (
-        complaint.filling_on_behalf_of
-        and complaint.complaint_address is not None
-    ):
+    if complaint.filling_on_behalf_of and complaint.complaint_address is not None:
         resolved_addr = ComplaintAddressResponse.model_validate(
             complaint.complaint_address
         )
@@ -91,11 +87,11 @@ def _process_and_save_complaint(
     db: Session,
 ) -> ComplaintResponse:
     """Internal helper to call AI microservice and persist normalized complaint records."""
-    complaint_text = payload.complaint1
+    complaint_text = payload.complaint
     if not complaint_text or len(complaint_text.strip()) < 5:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Complaint text ('complaint1') must be at least 5 characters.",
+            detail="Complaint text ('complaint') must be at least 5 characters.",
         )
 
     # 1. Call telecom-ai-service microservice for AI features & priority classification
@@ -162,12 +158,8 @@ def _process_and_save_complaint(
         complaint_id=db_complaint.id,
         complexity=ai_features.get("complexity", "LOW"),
         complexity_score=ai_features.get("complexity_score", 0),
-        weighted_complexity_score=ai_features.get(
-            "weighted_complexity_score", 0.0
-        ),
-        weighted_negativity_score=ai_features.get(
-            "weighted_negativity_score", 0.0
-        ),
+        weighted_complexity_score=ai_features.get("weighted_complexity_score", 0.0),
+        weighted_negativity_score=ai_features.get("weighted_negativity_score", 0.0),
         total_complexity_score=ai_features.get("total_complexity_score", 0.0),
     )
     db.add(db_priority)
@@ -176,12 +168,20 @@ def _process_and_save_complaint(
     db.commit()
     db.refresh(db_complaint)
 
-    return _build_complaint_response(db_complaint, db)
+    # Invalidate cache
+    if user_id:
+        invalidate_cache(f"user:{user_id}:complaints")
+    invalidate_cache("complaints:all*")
+
+    response_data = _build_complaint_response(db_complaint, db)
+    # Set cache for the individual complaint
+    set_cached_data(
+        f"complaint:{db_complaint.id}", response_data.model_dump(mode="json")
+    )
+    return response_data
 
 
-@router.post(
-    "", response_model=ComplaintResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("", response_model=ComplaintResponse, status_code=status.HTTP_201_CREATED)
 def create_complaint(
     payload: ComplaintCreate,
     current_user: Annotated[User | None, Depends(get_optional_current_user)] = None,
@@ -249,14 +249,22 @@ def update_complaint(
     if payload.status is not None:
         complaint.status = payload.status
         if payload.status in ["RESOLVED", "CLOSED"]:
-            complaint.closing_time_stamp = (
-                payload.closing_time_stamp
-                or datetime.now(UTC).replace(tzinfo=None)
-            )
+            complaint.closing_time_stamp = payload.closing_time_stamp or datetime.now(
+                UTC
+            ).replace(tzinfo=None)
 
     db.commit()
     db.refresh(complaint)
-    return _build_complaint_response(complaint, db)
+
+    # Invalidate cache
+    invalidate_cache(f"complaint:{complaint_id}")
+    if complaint.user_id:
+        invalidate_cache(f"user:{complaint.user_id}:complaints")
+    invalidate_cache("complaints:all*")
+
+    response_data = _build_complaint_response(complaint, db)
+    set_cached_data(f"complaint:{complaint_id}", response_data.model_dump(mode="json"))
+    return response_data
 
 
 @router.get("/me", response_model=list[ComplaintResponse])
@@ -270,6 +278,11 @@ def get_my_complaints(
     Retrieves only the complaint tickets submitted by the authenticated customer.
     Requires Bearer JWT Authorization header.
     """
+    cache_key = f"user:{current_user.id}:complaints"
+    cached = get_cached_data(cache_key)
+    if cached is not None:
+        return cached
+
     complaints = (
         db.query(Complaint)
         .options(
@@ -282,14 +295,15 @@ def get_my_complaints(
         .limit(limit)
         .all()
     )
-    return [_build_complaint_response(c, db) for c in complaints]
+    result = [_build_complaint_response(c, db) for c in complaints]
+    set_cached_data(cache_key, [r.model_dump(mode="json") for r in result])
+    return result
 
 
 @router.get("", response_model=list[ComplaintResponse])
 def list_complaints(
     db: Annotated[Session, Depends(get_db)],
-    complexity: str
-    | None = Query(
+    complexity: str | None = Query(
         None,
         description="Optional filter by criticality level: LOW, MEDIUM, HIGH, CRITICAL (or low, med, high, critical)",
     ),
@@ -301,6 +315,12 @@ def list_complaints(
     - GET /api/v1/complaints (Returns all tickets)
     - GET /api/v1/complaints?complexity=CRITICAL (Returns critical tickets)
     """
+    comp_filter = complexity.strip().lower() if complexity else "all"
+    cache_key = f"complaints:all:{comp_filter}"
+    cached = get_cached_data(cache_key)
+    if cached is not None:
+        return cached
+
     query = db.query(Complaint).options(
         joinedload(Complaint.complaint_address),
         joinedload(Complaint.ai_analysis),
@@ -315,7 +335,9 @@ def list_complaints(
         )
 
     complaints = query.offset(skip).limit(limit).all()
-    return [_build_complaint_response(c, db) for c in complaints]
+    result = [_build_complaint_response(c, db) for c in complaints]
+    set_cached_data(cache_key, [r.model_dump(mode="json") for r in result])
+    return result
 
 
 @router.get("/{complaint_id}", response_model=ComplaintResponse)
@@ -323,6 +345,11 @@ def get_complaint(
     complaint_id: str,
     db: Annotated[Session, Depends(get_db)],
 ):
+    cache_key = f"complaint:{complaint_id}"
+    cached = get_cached_data(cache_key)
+    if cached is not None:
+        return cached
+
     complaint = (
         db.query(Complaint)
         .options(
@@ -338,4 +365,6 @@ def get_complaint(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Complaint with ID '{complaint_id}' not found",
         )
-    return _build_complaint_response(complaint, db)
+    result = _build_complaint_response(complaint, db)
+    set_cached_data(cache_key, result.model_dump(mode="json"))
+    return result

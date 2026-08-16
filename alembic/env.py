@@ -1,20 +1,14 @@
-import os
 from logging.config import fileConfig
 
-from alembic import context
 from dotenv import load_dotenv
+
+from alembic import context
 
 # Load environment variables
 load_dotenv()
 
 # Import Base and models for autogenerate support
 from app.core.database import Base, engine
-from app.models.complaints import (
-    Complaint,
-    ComplaintAIAnalysis,
-    ComplaintPriorityScores,
-)
-from app.models.user import Profile, ServiceDetails, User
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

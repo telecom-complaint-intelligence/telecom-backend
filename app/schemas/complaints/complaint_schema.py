@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, AliasChoices
 
 from app.schemas.complaints.address_schema import (
     ComplaintAddressResponse,
@@ -10,12 +10,17 @@ from app.schemas.complaints.priority_scores_schema import PriorityScoresResponse
 
 
 class ComplaintCreate(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     ticket_number: str | None = Field(
         None,
         description="Optional ticket number (auto-generated if omitted)",
     )
     complaint: str = Field(
-        ..., min_length=5, description="Customer complaint text"
+        ...,
+        min_length=5,
+        description="Customer complaint text",
+        validation_alias=AliasChoices("complaint", "complaint1"),
     )
 
     filling_on_behalf_of: bool = Field(
@@ -33,9 +38,7 @@ class ComplaintCreate(BaseModel):
     state: str | None = Field(
         None, description="Custom state (required only if on behalf of)"
     )
-    country: str | None = Field(
-        "India", description="Custom country (default: India)"
-    )
+    country: str | None = Field("India", description="Custom country (default: India)")
     zipcode: str | None = Field(
         None, description="Custom zipcode (required only if on behalf of)"
     )
@@ -45,9 +48,7 @@ class ComplaintUpdate(BaseModel):
     complaint2: str | None = Field(
         None, description="Follow-up customer complaint or clarification"
     )
-    response: str | None = Field(
-        None, description="Updated AI/Agent triage response"
-    )
+    response: str | None = Field(None, description="Updated AI/Agent triage response")
     status: str | None = Field(
         None, description="OPEN | IN_PROGRESS | RESOLVED | CLOSED"
     )

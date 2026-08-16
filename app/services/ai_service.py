@@ -8,6 +8,7 @@ load_dotenv()
 
 AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://localhost:8001/api/v1/analyze")
 
+
 class AIServiceClient:
     """
     HTTP Client in telecom-backend for calling the telecom-ai-service inference microservice.
@@ -21,14 +22,17 @@ class AIServiceClient:
         try:
             with httpx.Client(timeout=30.0) as client:
                 response = client.post(
-                    AI_SERVICE_URL,
-                    json={"complaint": complaint_text}
+                    AI_SERVICE_URL, json={"complaint": complaint_text}
                 )
                 if response.status_code == 200:
                     return response.json()
-                print(f"Warning: AI service returned status code {response.status_code}")
+                print(
+                    f"Warning: AI service returned status code {response.status_code}"
+                )
         except (httpx.HTTPError, RuntimeError, ValueError) as e:
-            print(f"Notice: Failed to connect to AI service at {AI_SERVICE_URL} ({e}). Using local fallback.")
+            print(
+                f"Notice: Failed to connect to AI service at {AI_SERVICE_URL} ({e}). Using local fallback."
+            )
 
         # Local fallback if telecom-ai-service is offline
         return {
@@ -45,11 +49,11 @@ class AIServiceClient:
                 "scope": "individual",
                 "service_impact": "degraded",
                 "duration_hours": None,
-                "occurrence_pattern": "unknown"
+                "occurrence_pattern": "unknown",
             },
             "complexity": "MEDIUM",
             "complexity_score": 38,
             "weighted_complexity_score": 32.3,
             "weighted_negativity_score": 4.5,
-            "total_complexity_score": 36.8
+            "total_complexity_score": 36.8,
         }

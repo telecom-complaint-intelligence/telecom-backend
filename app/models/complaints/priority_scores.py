@@ -24,9 +24,7 @@ class ComplaintPriorityScores(Base):
         index=True,
     )
 
-    complexity = Column(
-        String(50), nullable=False
-    )  # LOW, MEDIUM, HIGH, CRITICAL
+    complexity = Column(String(50), nullable=False)  # LOW, MEDIUM, HIGH, CRITICAL
     complexity_score = Column(Integer, nullable=False)
     weighted_complexity_score = Column(Float, nullable=False)
     weighted_negativity_score = Column(Float, nullable=False)
