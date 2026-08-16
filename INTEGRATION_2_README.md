@@ -21,111 +21,111 @@ erDiagram
     complaints ||--|| complaint_priority_scores : "priority math (complaint_id)"
 
     users {
-        VARCHAR(36) id PK
-        VARCHAR(50) customer_id UK
-        VARCHAR(255) email UK
-        VARCHAR(255) hashed_password
-        VARCHAR(50) role "customer | client"
+        VARCHAR id PK
+        VARCHAR customer_id UK
+        VARCHAR email UK
+        VARCHAR hashed_password
+        VARCHAR role
         BOOLEAN email_verified
         BOOLEAN cookie_consent
-        VARCHAR(36) department_id FK
-        VARCHAR(6) verification_otp
+        VARCHAR department_id FK
+        VARCHAR verification_otp
         TIMESTAMP otp_created_at
         TIMESTAMP created_at
     }
 
     profiles {
-        VARCHAR(36) id PK
-        VARCHAR(36) user_id FK "UK"
-        VARCHAR(255) name
-        VARCHAR(50) phone
+        VARCHAR id PK
+        VARCHAR user_id FK
+        VARCHAR name
+        VARCHAR phone
         TEXT address
-        VARCHAR(100) city
-        VARCHAR(100) state_val
-        VARCHAR(100) country "Default: India"
-        VARCHAR(20) zipcode
+        VARCHAR city
+        VARCHAR state_val
+        VARCHAR country
+        VARCHAR zipcode
         BOOLEAN is_complete
     }
 
     service_details {
-        VARCHAR(36) id PK
-        VARCHAR(36) user_id FK "UK"
-        VARCHAR(50) account_ref
-        VARCHAR(50) bill_cycle
-        VARCHAR(100) active_plan
-        VARCHAR(50) connection_status
-        VARCHAR(50) plan_usage "self | shop | organization"
+        VARCHAR id PK
+        VARCHAR user_id FK
+        VARCHAR account_ref
+        VARCHAR bill_cycle
+        VARCHAR active_plan
+        VARCHAR connection_status
+        VARCHAR plan_usage
     }
 
     departments {
-        VARCHAR(36) id PK
-        VARCHAR(100) name UK
+        VARCHAR id PK
+        VARCHAR name UK
         BOOLEAN is_archived
         TIMESTAMP created_at
     }
 
     client_invitations {
-        VARCHAR(36) id PK
-        VARCHAR(255) email
-        VARCHAR(255) hashed_password
-        VARCHAR(255) token UK
+        VARCHAR id PK
+        VARCHAR email
+        VARCHAR hashed_password
+        VARCHAR token UK
         BOOLEAN is_activated
-        VARCHAR(36) department_id FK
+        VARCHAR department_id FK
         TIMESTAMP created_at
         TIMESTAMP expires_at
     }
 
     complaints {
-        VARCHAR(36) id PK
-        VARCHAR(50) ticket_number UK
-        VARCHAR(36) user_id FK "Nullable (Guest support)"
-        TEXT complaint1 "Initial customer complaint text"
-        TEXT response "AI automated triage advice / resolution plan"
-        TEXT complaint2 "Follow-up complaint / feedback"
-        BOOLEAN filling_on_behalf_of "True = custom address, False = user profile"
-        VARCHAR(50) status "OPEN | IN_PROGRESS | RESOLVED | CLOSED"
-        VARCHAR(100) category "Internet / Connectivity, Billing, etc."
-        TIMESTAMP timestamp "Submission timestamp"
+        VARCHAR id PK
+        VARCHAR ticket_number UK
+        VARCHAR user_id FK
+        TEXT complaint1
+        TEXT response
+        TEXT complaint2
+        BOOLEAN filling_on_behalf_of
+        VARCHAR status
+        VARCHAR category
+        TIMESTAMP timestamp
         TIMESTAMP created_at
-        TIMESTAMP closing_time_stamp "Resolution timestamp"
+        TIMESTAMP closing_time_stamp
     }
 
     complaint_address {
-        VARCHAR(36) id PK
-        VARCHAR(36) complaint_id FK "UK (1-to-1)"
+        VARCHAR id PK
+        VARCHAR complaint_id FK
         TEXT address
-        VARCHAR(100) city
-        VARCHAR(100) state
-        VARCHAR(100) country "Default: India"
-        VARCHAR(20) zipcode
+        VARCHAR city
+        VARCHAR state
+        VARCHAR country
+        VARCHAR zipcode
     }
 
     complaint_ai_analysis {
-        VARCHAR(36) id PK
-        VARCHAR(36) complaint_id FK "UK (1-to-1)"
-        FLOAT category_confidence "e.g. 0.9755"
-        FLOAT negativity_score "0.0 to 1.0"
-        FLOAT sentiment_score "0 to 100"
-        JSON component "['fiber_cable', 'router', etc.]"
-        JSON failure_type "['physical_damage', 'outage', etc.]"
-        VARCHAR(50) scope "individual | multiple_users | area_wide"
-        VARCHAR(50) service_impact "complete_outage | degraded | intermittent"
+        VARCHAR id PK
+        VARCHAR complaint_id FK
+        FLOAT category_confidence
+        FLOAT negativity_score
+        FLOAT sentiment_score
+        JSON component
+        JSON failure_type
+        VARCHAR scope
+        VARCHAR service_impact
         FLOAT duration_hours
-        VARCHAR(50) occurrence_pattern "one_time | recurring"
-        TEXT solution_a "AI-suggested technician/user resolution plan"
-        VARCHAR(50) extraction_source "ml | llm"
+        VARCHAR occurrence_pattern
+        TEXT solution_a
+        VARCHAR extraction_source
         FLOAT lowest_confidence
         TIMESTAMP created_at
     }
 
     complaint_priority_scores {
-        VARCHAR(36) id PK
-        VARCHAR(36) complaint_id FK "UK (1-to-1)"
-        VARCHAR(50) complexity "LOW | MEDIUM | HIGH | CRITICAL"
-        INTEGER complexity_score "0 to 100 (Technical score)"
-        FLOAT weighted_complexity_score "85% weight = score * 0.85"
-        FLOAT weighted_negativity_score "15% weight = sentiment * 0.15"
-        FLOAT total_complexity_score "weighted_complexity + weighted_negativity"
+        VARCHAR id PK
+        VARCHAR complaint_id FK
+        VARCHAR complexity
+        INTEGER complexity_score
+        FLOAT weighted_complexity_score
+        FLOAT weighted_negativity_score
+        FLOAT total_complexity_score
         TIMESTAMP created_at
     }
 ```
@@ -175,19 +175,19 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    Start([Customer Submits Complaint]) --> CheckAuth{Is Bearer Token Provided?}
-    CheckAuth -- Yes --> AuthUser[Attach user_id = current_user.id]
-    CheckAuth -- No --> GuestUser[Set user_id = null (Guest Mode)]
+    Start(["Customer Submits Complaint"]) --> CheckAuth{"Is Bearer Token Provided?"}
+    CheckAuth -- Yes --> AuthUser["Attach user_id = current_user.id"]
+    CheckAuth -- No --> GuestUser["Set user_id = null (Guest Mode)"]
 
-    AuthUser --> CheckBehalf{Is filling_on_behalf_of == True?}
-    GuestUser --> CustomAddr[Save Custom Location into complaint_address Table]
+    AuthUser --> CheckBehalf{"Is filling_on_behalf_of == True?"}
+    GuestUser --> CustomAddr["Save Custom Location into complaint_address Table"]
 
     CheckBehalf -- Yes --> CustomAddr
-    CheckBehalf -- No --> ProfileAddr[Auto-Resolve Location from User's profiles Table]
+    CheckBehalf -- No --> ProfileAddr["Auto-Resolve Location from User's profiles Table"]
 
-    CustomAddr --> AIAnalysis[Run AI Inference & Save into 3 Normalized Tables]
+    CustomAddr --> AIAnalysis["Run AI Inference & Save into 3 Normalized Tables"]
     ProfileAddr --> AIAnalysis
-    AIAnalysis --> End([Return Ticket ID, AI Triage & Resolution Plan])
+    AIAnalysis --> End(["Return Ticket ID, AI Triage & Resolution Plan"])
 ```
 
 ---
