@@ -1,6 +1,7 @@
 import argparse
 import os
 import sys
+
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -8,8 +9,8 @@ from sqlalchemy.orm import sessionmaker
 # Set Python path to find app directory
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.models.user import User, Profile, ServiceDetails
 from app.api.auth import generate_customer_id
+from app.models.user import Profile, ServiceDetails, User
 
 load_dotenv()
 
@@ -17,10 +18,15 @@ DATABASE_URL = os.getenv(
     "DATABASE_URL", "postgresql://postgres:password@localhost:5432/telecom_db"
 )
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Promote a user to client role in Telu database.")
+    parser = argparse.ArgumentParser(
+        description="Promote a user to client role in Telu database."
+    )
     parser.add_argument("--email", required=True, help="Email of the user to promote")
-    parser.add_argument("--role", default="client", help="Target role (default: client)")
+    parser.add_argument(
+        "--role", default="client", help="Target role (default: client)"
+    )
     args = parser.parse_args()
 
     engine = create_engine(DATABASE_URL)
@@ -35,7 +41,7 @@ def main():
                 email=args.email,
                 role=args.role,
                 customer_id=generate_customer_id(db),
-                email_verified=True
+                email_verified=True,
             )
             db.add(user)
             db.commit()
@@ -45,7 +51,7 @@ def main():
             profile = Profile(
                 user_id=user.id,
                 name=args.email.split("@")[0].capitalize(),
-                is_complete=True
+                is_complete=True,
             )
             db.add(profile)
 
@@ -57,13 +63,16 @@ def main():
         else:
             user.role = args.role
             db.commit()
-            print(f"✓ User {args.email} successfully promoted/updated to role {args.role}!")
+            print(
+                f"✓ User {args.email} successfully promoted/updated to role {args.role}!"
+            )
     except Exception as e:
         print(f"Error: {e}")
         db.rollback()
         sys.exit(1)
     finally:
         db.close()
+
 
 if __name__ == "__main__":
     main()

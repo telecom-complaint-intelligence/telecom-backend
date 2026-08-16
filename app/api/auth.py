@@ -541,6 +541,10 @@ async def complete_profile(
     db_user.profile.zipcode = request.zipcode
     db_user.profile.is_complete = True
 
+    if not db_user.service_details:
+        db_user.service_details = ServiceDetails(user_id=db_user.id)
+    db_user.service_details.plan_usage = request.plan_usage
+
     db.commit()
     db.refresh(db_user)
 
