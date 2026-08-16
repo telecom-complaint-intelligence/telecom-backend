@@ -20,10 +20,16 @@ class User(Base):
     email_verified = Column(Boolean, default=False, nullable=False)
     cookie_consent = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    is_archived = Column(Boolean, default=False, nullable=False)
 
     # Verification OTP fields
     verification_otp = Column(String(6), nullable=True)
     otp_created_at = Column(DateTime, nullable=True)
+
+    # Department relationship
+    department_id = Column(
+        String(36), ForeignKey("departments.id", ondelete="SET NULL"), nullable=True
+    )
 
     # Relationships
     profile = relationship(
@@ -35,6 +41,7 @@ class User(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    department = relationship("Department", back_populates="users")
 
 
 class Profile(Base):
@@ -84,3 +91,38 @@ class ServiceDetails(Base):
     plan_usage = Column(String, nullable=True)  # "self" | "shop" | "organization"
 
     user = relationship("User", back_populates="service_details")
+
+
+class Department(Base):
+    __tablename__ = "departments"
+
+    id = Column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True
+    )
+    name = Column(String(100), unique=True, index=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    is_archived = Column(Boolean, default=False, nullable=False)
+
+    users = relationship("User", back_populates="department")
+    invitations = relationship("ClientInvitation", back_populates="department")
+
+
+class ClientInvitation(Base):
+    __tablename__ = "client_invitations"
+
+    id = Column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4()), index=True
+    )
+    email = Column(String(100), unique=True, index=True, nullable=False)
+    department_id = Column(
+        String(36),
+        ForeignKey("departments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    token = Column(String(255), unique=True, index=True, nullable=False)
+    hashed_password = Column(String, nullable=True)
+    is_activated = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+
+    department = relationship("Department", back_populates="invitations")

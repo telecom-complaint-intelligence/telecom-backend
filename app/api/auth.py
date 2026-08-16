@@ -2,7 +2,7 @@ import os
 import random
 import smtplib
 import string
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from typing import Annotated
@@ -10,12 +10,14 @@ from typing import Annotated
 import httpx
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.redis import get_cached_data, invalidate_cache, set_cached_data
 from app.core.security import create_access_token, get_password_hash, verify_password
-from app.models.user import Profile, ServiceDetails, User
+from app.models.user import ClientInvitation, Department, Profile, ServiceDetails, User
 
 load_dotenv()
 
@@ -75,6 +77,32 @@ class ResendOtpRequest(BaseModel):
 
 class VerifySessionRequest(BaseModel):
     email: EmailStr
+
+
+class DepartmentCreateRequest(BaseModel):
+    name: str
+    requester_email: str | None = None
+
+
+class DepartmentUpdateRequest(BaseModel):
+    name: str
+    requester_email: str
+
+
+class InviteClientRequest(BaseModel):
+    email: EmailStr
+    password: str
+    department_id: str
+    requester_email: str | None = None
+
+
+class OperatorUpdateRequest(BaseModel):
+    department_id: str | None = None
+    requester_email: str
+
+
+class ActivateClientRequest(BaseModel):
+    token: str
 
 
 # Helper to generate unique uppercase alphanumeric customer ID
@@ -151,6 +179,62 @@ def send_email_otp(to_email: str, otp: str) -> bool:
         return False
 
 
+def send_email_invitation(to_email: str, short_link: str, department_name: str) -> bool:
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_port = os.getenv("SMTP_PORT")
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_pass = os.getenv("SMTP_PASSWORD")
+    smtp_from = os.getenv("SMTP_FROM", smtp_user)
+
+    print(
+        f"\n[INVITATION SYSTEM] Activation link for {to_email} ({department_name}): {short_link}\n"
+    )
+
+    if not (smtp_host and smtp_port and smtp_user and smtp_pass):
+        print(
+            "[EMAIL SYSTEM WARNING] SMTP configuration variables not found. Skipping real invitation email."
+        )
+        return False
+
+    try:
+        msg = MIMEMultipart()
+        msg["From"] = smtp_from
+        msg["To"] = to_email
+        msg["Subject"] = f"Invitation to join Telu Operations ({department_name})"
+
+        body = f"""
+        <html>
+            <body style="font-family: sans-serif; padding: 25px; color: #1E0A2D; background-color: #FDFBF7;">
+                <div style="max-width: 550px; margin: 0 auto; border: 1px solid #EBE6E0; padding: 20px; background-color: #ffffff; border-radius: 8px;">
+                    <h2 style="font-family: serif; color: #1E0A2D; border-bottom: 1px solid #EBE6E0; padding-bottom: 10px;">You are Invited to Telu Operations</h2>
+                    <p>Hello,</p>
+                    <p>A master client has invited you to join the <strong>{department_name}</strong> operations division at Telu.</p>
+                    <p>Click the link below to activate your account and complete registration:</p>
+                    <div style="margin: 25px 0;">
+                        <a href="{short_link}" style="background-color: #6C5CE7; color: white; padding: 12px 24px; text-decoration: none; font-weight: bold; border-radius: 6px; display: inline-block;">Activate Account</a>
+                    </div>
+                    <p style="font-size: 12px; color: #8B7E74;">If the button above does not work, copy and paste this link in your browser:</p>
+                    <p style="font-size: 12px; color: #6C5CE7; font-family: monospace; word-break: break-all;">{short_link}</p>
+                    <div style="border-top: 1px solid #EBE6E0; margin-top: 25px; padding-top: 15px; font-size: 11px; color: #8B7E74; text-align: center;">
+                        © {datetime.now(UTC).year} Telu Technologies Inc. All rights reserved.
+                    </div>
+                </div>
+            </body>
+        </html>
+        """
+        msg.attach(MIMEText(body, "html"))
+
+        server = smtplib.SMTP(smtp_host, int(smtp_port))
+        server.starttls()
+        server.login(smtp_user, smtp_pass)
+        server.sendmail(smtp_from, to_email, msg.as_string())
+        server.close()
+        return True
+    except Exception as e:  # noqa: BLE001
+        print(f"[INVITATION SYSTEM ERROR] Failed to send invitation email: {e}")
+        return False
+
+
 # Helper to build the response user object
 def build_user_response(db_user: User):
     # Ensure profile and service details objects exist
@@ -196,6 +280,7 @@ def build_user_response(db_user: User):
         "id": db_user.customer_id,
         "email": db_user.email,
         "role": db_user.role,
+        "department": db_user.department.name if db_user.department else None,
         "isProfileComplete": db_user.profile.is_complete if db_user.profile else False,
         "emailVerified": db_user.email_verified,
         "cookieConsent": db_user.cookie_consent,
@@ -286,13 +371,36 @@ async def google_login(
     db_user = db.query(User).filter(User.email == email).first()
 
     if not db_user:
-        # Create user record
-        db_user = User(
-            email=email,
-            role="customer",
-            customer_id=generate_customer_id(db),
-            email_verified=True,
+        # Check if there is an activated client invitation
+        invitation = (
+            db.query(ClientInvitation)
+            .filter(
+                ClientInvitation.email == email, ClientInvitation.is_activated == True
+            )
+            .first()
         )
+        if invitation:
+            db_user = User(
+                email=email,
+                role="client",
+                department_id=invitation.department_id,
+                customer_id=generate_customer_id(db),
+                email_verified=True,
+            )
+        elif email == "vaahee21@gmail.com":
+            db_user = User(
+                email=email,
+                role="client",
+                customer_id=generate_customer_id(db),
+                email_verified=True,
+            )
+        else:
+            db_user = User(
+                email=email,
+                role="customer",
+                customer_id=generate_customer_id(db),
+                email_verified=True,
+            )
         db.add(db_user)
         db.commit()
         db.refresh(db_user)
@@ -312,9 +420,12 @@ async def google_login(
         db.commit()
         db.refresh(db_user)
     else:
-        # Update user profile picture
-        if db_user.profile and profile_pic:
-            db_user.profile.profile_picture = profile_pic
+        # Update user profile picture and name
+        if db_user.profile:
+            if profile_pic:
+                db_user.profile.profile_picture = profile_pic
+            if name and name != "Telu User":
+                db_user.profile.name = name
             db.commit()
 
     access_token = create_access_token(
@@ -551,3 +662,357 @@ async def verify_session(
             detail="User session is invalid or deleted.",
         )
     return {"status": "success", "user": build_user_response(db_user)}
+
+
+# 10. List Departments
+@router.get("/auth/departments")
+async def get_departments(db: Annotated[Session, Depends(get_db)]):
+    cache_key = "telu:departments"
+    cached = get_cached_data(cache_key)
+    if cached is not None:
+        return cached
+
+    departments = db.query(Department).filter(Department.is_archived == False).all()
+    result = [{"id": d.id, "name": d.name} for d in departments]
+    set_cached_data(cache_key, result, expire_seconds=300)
+    return result
+
+
+# 11. Create Department
+@router.post("/auth/departments")
+async def create_department(
+    request: DepartmentCreateRequest, db: Annotated[Session, Depends(get_db)]
+):
+    if request.requester_email != "vaahee21@gmail.com":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the Master Client Admin can perform this action.",
+        )
+
+    # Check if department already exists
+    existing = (
+        db.query(Department)
+        .filter(Department.name == request.name, Department.is_archived == False)
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Department already exists.",
+        )
+
+    dept = Department(name=request.name)
+    db.add(dept)
+    db.commit()
+    db.refresh(dept)
+    invalidate_cache("telu:departments")
+    return {"status": "success", "department": {"id": dept.id, "name": dept.name}}
+
+
+# 12. Invite Client
+@router.post("/auth/invite-client")
+async def invite_client(
+    request: InviteClientRequest, db: Annotated[Session, Depends(get_db)]
+):
+    if request.requester_email != "vaahee21@gmail.com":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the Master Client Admin can perform this action.",
+        )
+
+    # Check if user already exists
+    existing_user = (
+        db.query(User)
+        .filter(User.email == request.email, User.is_archived == False)
+        .first()
+    )
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A user with this email address already exists.",
+        )
+
+    # Check if department exists
+    dept = (
+        db.query(Department)
+        .filter(Department.id == request.department_id, Department.is_archived == False)
+        .first()
+    )
+    if not dept:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Specified department not found.",
+        )
+
+    # Check if invitation already exists
+    existing_invite = (
+        db.query(ClientInvitation)
+        .filter(ClientInvitation.email == request.email)
+        .first()
+    )
+    if existing_invite:
+        db.delete(existing_invite)
+        db.commit()
+
+    import uuid
+
+    token = str(uuid.uuid4())
+    expires_at = datetime.now(UTC).replace(tzinfo=None) + timedelta(days=7)
+
+    hashed_pass = get_password_hash(request.password)
+
+    invitation = ClientInvitation(
+        email=request.email,
+        department_id=request.department_id,
+        token=token,
+        hashed_password=hashed_pass,
+        expires_at=expires_at,
+    )
+    db.add(invitation)
+    db.commit()
+    invalidate_cache("telu:operators:*")
+    db.refresh(invitation)
+
+    # Build shortened link pointing to backend redirection route
+    backend_url = os.getenv("BACKEND_API_URL", "http://localhost:8000")
+    short_link = f"{backend_url}/api/auth/lnk/{token}"
+
+    # Send SMTP invitation email
+    send_email_invitation(request.email, short_link, dept.name)
+
+    return {
+        "status": "success",
+        "message": f"Invitation successfully sent to {request.email}.",
+    }
+
+
+# 13. Activate Invitation
+@router.post("/auth/activate-client")
+async def activate_client(
+    request: ActivateClientRequest, db: Annotated[Session, Depends(get_db)]
+):
+    invitation = (
+        db.query(ClientInvitation)
+        .filter(ClientInvitation.token == request.token)
+        .first()
+    )
+    if not invitation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invitation token is invalid or does not exist.",
+        )
+
+    if invitation.expires_at < datetime.now(UTC).replace(tzinfo=None):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This invitation token has expired.",
+        )
+
+    if invitation.is_activated:
+        return {"status": "success", "message": "Account has already been activated."}
+
+    # Toggle activated flag
+    invitation.is_activated = True
+    db.commit()
+
+    # Provision user record
+    db_user = db.query(User).filter(User.email == invitation.email).first()
+    if not db_user:
+        db_user = User(
+            email=invitation.email,
+            hashed_password=invitation.hashed_password,
+            role="client",
+            department_id=invitation.department_id,
+            customer_id=generate_customer_id(db),
+            email_verified=True,
+        )
+        db.add(db_user)
+        db.commit()
+        db.refresh(db_user)
+
+        # Create linked profile record
+        db_profile = Profile(
+            user_id=db_user.id,
+            name=invitation.email.split("@")[0].capitalize(),
+            is_complete=True,
+        )
+        db.add(db_profile)
+
+        # Create linked service details record
+        db_service = ServiceDetails(user_id=db_user.id)
+        db.add(db_service)
+        db.commit()
+        db.refresh(db_user)
+
+    return {
+        "status": "success",
+        "message": "Account activated successfully. Please sign in.",
+    }
+
+
+# 14. Resolve Short Link Redirect
+@router.get("/auth/lnk/{token}")
+async def resolve_short_link(token: str, db: Annotated[Session, Depends(get_db)]):
+    invitation = (
+        db.query(ClientInvitation).filter(ClientInvitation.token == token).first()
+    )
+    if not invitation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Link is invalid or has expired.",
+        )
+
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    return RedirectResponse(url=f"{frontend_url}/auth/activate?token={token}")
+
+
+# 15. Get Operators/Client Staff List
+@router.get("/auth/operators")
+async def get_operators(email: str, db: Annotated[Session, Depends(get_db)]):
+    if not email:
+        return []
+
+    cache_key = f"telu:operators:{email}"
+    cached = get_cached_data(cache_key)
+    if cached is not None:
+        return cached
+
+    current_user = db.query(User).filter(User.email == email).first()
+    if not current_user:
+        return []
+
+    operators = (
+        db.query(User).filter(User.role == "client", User.is_archived == False).all()
+    )
+    is_master_admin = current_user.email == "vaahee21@gmail.com"
+
+    result = []
+    for op in operators:
+        # If not the master admin, restrict visibility to the same department
+        if (
+            not is_master_admin
+            and current_user
+            and current_user.department_id != op.department_id
+        ):
+            continue
+
+        name = op.profile.name if op.profile else op.email.split("@")[0].capitalize()
+        dept_name = op.department.name if op.department else "Unmapped"
+        result.append(
+            {
+                "id": op.customer_id,
+                "name": name,
+                "email": op.email,
+                "department": dept_name,
+                "status": "Active" if op.email_verified else "Pending",
+            }
+        )
+
+    set_cached_data(cache_key, result, expire_seconds=300)
+    return result
+
+
+# 16. Update Department Name
+@router.put("/auth/departments/{id}")
+async def update_department(
+    id: str, request: DepartmentUpdateRequest, db: Annotated[Session, Depends(get_db)]
+):
+    if request.requester_email != "vaahee21@gmail.com":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the Master Client Admin can perform this action.",
+        )
+    dept = (
+        db.query(Department)
+        .filter(Department.id == id, Department.is_archived == False)
+        .first()
+    )
+    if not dept:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Department not found.",
+        )
+
+    dept.name = request.name
+    db.commit()
+    invalidate_cache("telu:departments")
+    invalidate_cache("telu:operators:*")
+    return {"status": "success"}
+
+
+# 17. Archive/Soft-delete Department
+@router.delete("/auth/departments/{id}")
+async def archive_department(
+    id: str, requester_email: str, db: Annotated[Session, Depends(get_db)]
+):
+    if requester_email != "vaahee21@gmail.com":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the Master Client Admin can perform this action.",
+        )
+    dept = (
+        db.query(Department)
+        .filter(Department.id == id, Department.is_archived == False)
+        .first()
+    )
+    if not dept:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Department not found.",
+        )
+
+    dept.is_archived = True
+    db.commit()
+    invalidate_cache("telu:departments")
+    invalidate_cache("telu:operators:*")
+    return {"status": "success"}
+
+
+# 18. Update Operator Department Mapping
+@router.put("/auth/operators/{id}")
+async def update_operator(
+    id: str, request: OperatorUpdateRequest, db: Annotated[Session, Depends(get_db)]
+):
+    if request.requester_email != "vaahee21@gmail.com":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the Master Client Admin can perform this action.",
+        )
+    op = (
+        db.query(User).filter(User.customer_id == id, User.is_archived == False).first()
+    )
+    if not op:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Operator not found.",
+        )
+
+    op.department_id = request.department_id
+    db.commit()
+    invalidate_cache("telu:operators:*")
+    return {"status": "success"}
+
+
+# 19. Archive/Soft-delete Operator
+@router.delete("/auth/operators/{id}")
+async def archive_operator(
+    id: str, requester_email: str, db: Annotated[Session, Depends(get_db)]
+):
+    if requester_email != "vaahee21@gmail.com":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the Master Client Admin can perform this action.",
+        )
+    op = (
+        db.query(User).filter(User.customer_id == id, User.is_archived == False).first()
+    )
+    if not op:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Operator not found.",
+        )
+
+    op.is_archived = True
+    db.commit()
+    invalidate_cache("telu:operators:*")
+    return {"status": "success"}
