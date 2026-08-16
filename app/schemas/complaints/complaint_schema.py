@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, AliasChoices
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from app.schemas.complaints.address_schema import (
     ComplaintAddressResponse,
