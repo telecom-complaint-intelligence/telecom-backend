@@ -59,3 +59,10 @@ class Complaint(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    summary = relationship(
+        "ComplaintSummary",
+        back_populates="complaint",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
+

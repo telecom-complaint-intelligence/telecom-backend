@@ -13,6 +13,7 @@ from app.models.complaints import (
     ComplaintAddress,
     ComplaintAIAnalysis,
     ComplaintPriorityScores,
+    ComplaintSummary,
 )
 from app.models.user import User
 from app.schemas.complaints import (
@@ -20,6 +21,7 @@ from app.schemas.complaints import (
     ComplaintCreate,
     ComplaintFeedbackRequest,
     ComplaintResponse,
+    ComplaintSummaryResponse,
     ComplaintUpdate,
 )
 from app.services.ai_service import AIServiceClient
@@ -81,6 +83,9 @@ def _build_complaint_response(complaint: Complaint, db: Session) -> ComplaintRes
         resolved_address=resolved_addr,
         ai_analysis=complaint.ai_analysis,
         priority_scores=complaint.priority_scores,
+        summary=ComplaintSummaryResponse.model_validate(complaint.summary)
+        if complaint.summary
+        else None,
     )
 
 
@@ -184,6 +189,18 @@ def _process_and_save_complaint(
     )
     db.add(db_priority)
 
+    # 7. Create Table 5: Feature-Aggregated Summary (complaint_summaries)
+    summary_text = ai_features.get("summary") or f"[{ai_features.get('category', 'General')}] {complaint_text}"
+    db_summary = ComplaintSummary(
+        complaint_id=db_complaint.id,
+        complexity=ai_features.get("complexity", "LOW"),
+        headline=ai_features.get("headline"),
+        summary=summary_text,
+        solution_snippet=ai_features.get("solution_snippet"),
+        summary_structured=ai_features.get("summary_structured"),
+    )
+    db.add(db_summary)
+
     # Commit transaction
     db.commit()
     db.refresh(db_complaint)
@@ -249,6 +266,7 @@ def get_critical_complaints(
             joinedload(Complaint.complaint_address),
             joinedload(Complaint.ai_analysis),
             joinedload(Complaint.priority_scores),
+            joinedload(Complaint.summary),
         )
         .join(Complaint.priority_scores)
         .filter(ComplaintPriorityScores.complexity == "CRITICAL")
@@ -277,6 +295,7 @@ def submit_complaint_feedback(
             joinedload(Complaint.complaint_address),
             joinedload(Complaint.ai_analysis),
             joinedload(Complaint.priority_scores),
+            joinedload(Complaint.summary),
         )
         .filter(Complaint.id == complaint_id)
         .first()
@@ -369,6 +388,7 @@ def update_complaint(
             joinedload(Complaint.complaint_address),
             joinedload(Complaint.ai_analysis),
             joinedload(Complaint.priority_scores),
+            joinedload(Complaint.summary),
         )
         .filter(Complaint.id == complaint_id)
         .first()
@@ -428,6 +448,7 @@ def get_my_complaints(
             joinedload(Complaint.complaint_address),
             joinedload(Complaint.ai_analysis),
             joinedload(Complaint.priority_scores),
+            joinedload(Complaint.summary),
         )
         .filter(Complaint.user_id == current_user.id)
         .offset(skip)
@@ -464,6 +485,7 @@ def list_complaints(
         joinedload(Complaint.complaint_address),
         joinedload(Complaint.ai_analysis),
         joinedload(Complaint.priority_scores),
+        joinedload(Complaint.summary),
     )
     if complexity:
         norm = COMPLEXITY_MAP.get(
@@ -495,6 +517,7 @@ def get_complaint(
             joinedload(Complaint.complaint_address),
             joinedload(Complaint.ai_analysis),
             joinedload(Complaint.priority_scores),
+            joinedload(Complaint.summary),
         )
         .filter(Complaint.id == complaint_id)
         .first()
@@ -507,3 +530,31 @@ def get_complaint(
     result = _build_complaint_response(complaint, db)
     set_cached_data(cache_key, result.model_dump(mode="json"))
     return result
+
+
+@router.get("/{complaint_id}/summary", response_model=ComplaintSummaryResponse)
+def get_complaint_summary(
+    complaint_id: str,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """
+    Dedicated endpoint to fetch the generated summary for a given complaint ticket.
+    """
+    complaint = (
+        db.query(Complaint)
+        .options(joinedload(Complaint.summary))
+        .filter(Complaint.id == complaint_id)
+        .first()
+    )
+    if not complaint:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Complaint with ID '{complaint_id}' not found",
+        )
+    if not complaint.summary:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Summary for complaint '{complaint_id}' not found",
+        )
+    return complaint.summary
+

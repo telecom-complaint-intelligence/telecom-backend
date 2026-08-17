@@ -1,6 +1,8 @@
 import json
-import pytest
+
 import httpx
+import pytest
+
 
 @pytest.fixture(autouse=True)
 def mock_ai_service(monkeypatch):
@@ -15,7 +17,7 @@ def mock_ai_service(monkeypatch):
 
             try:
                 body = json.loads(request.read().decode("utf-8"))
-            except Exception:
+            except Exception:  # noqa: BLE001
                 body = {}
 
             complaint_text = body.get("complaint", "")

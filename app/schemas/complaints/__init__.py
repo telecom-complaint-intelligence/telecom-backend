@@ -10,6 +10,7 @@ from app.schemas.complaints.complaint_schema import (
     ComplaintUpdate,
 )
 from app.schemas.complaints.priority_scores_schema import PriorityScoresResponse
+from app.schemas.complaints.summary_schema import ComplaintSummaryResponse
 
 __all__ = [
     "AIAnalysisResponse",
@@ -18,6 +19,7 @@ __all__ = [
     "ComplaintCreate",
     "ComplaintFeedbackRequest",
     "ComplaintResponse",
+    "ComplaintSummaryResponse",
     "ComplaintUpdate",
     "PriorityScoresResponse",
 ]

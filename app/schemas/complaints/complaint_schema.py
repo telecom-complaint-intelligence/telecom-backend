@@ -7,6 +7,7 @@ from app.schemas.complaints.address_schema import (
 )
 from app.schemas.complaints.ai_analysis_schema import AIAnalysisResponse
 from app.schemas.complaints.priority_scores_schema import PriorityScoresResponse
+from app.schemas.complaints.summary_schema import ComplaintSummaryResponse
 
 
 class ComplaintCreate(BaseModel):
@@ -97,3 +98,5 @@ class ComplaintResponse(BaseModel):
     resolved_address: ComplaintAddressResponse | None = None
     ai_analysis: AIAnalysisResponse | None = None
     priority_scores: PriorityScoresResponse | None = None
+    summary: ComplaintSummaryResponse | None = None
+
