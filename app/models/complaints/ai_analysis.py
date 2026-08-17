@@ -63,3 +63,4 @@ class ComplaintAIAnalysis(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     complaint = relationship("Complaint", back_populates="ai_analysis")
+

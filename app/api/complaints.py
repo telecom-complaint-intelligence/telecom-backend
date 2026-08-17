@@ -27,6 +27,7 @@ from app.services.ai_service import AIServiceClient
 router = APIRouter(prefix="/complaints", tags=["Complaints"])
 
 COMPLEXITY_MAP = {
+    "other": "OTHER",
     "low": "LOW",
     "med": "MEDIUM",
     "medium": "MEDIUM",
