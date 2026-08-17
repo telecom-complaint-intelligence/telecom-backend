@@ -45,12 +45,12 @@ def _build_complaint_response(complaint: Complaint, db: Session) -> ComplaintRes
     resolved_addr = None
     cust_name = None
     cust_phone = None
-    
+
     if complaint.filling_on_behalf_of and complaint.complaint_address is not None:
         resolved_addr = ComplaintAddressResponse.model_validate(
             complaint.complaint_address
         )
-    
+
     # Query user to fetch resolved address and profile contact info
     if complaint.user_id:
         user = db.query(User).filter(User.id == complaint.user_id).first()
@@ -495,7 +495,9 @@ def list_complaints(
             ComplaintPriorityScores.complexity == norm
         )
 
-    complaints = query.order_by(Complaint.created_at.desc()).offset(skip).limit(limit).all()
+    complaints = (
+        query.order_by(Complaint.created_at.desc()).offset(skip).limit(limit).all()
+    )
     result = [_build_complaint_response(c, db) for c in complaints]
     set_cached_data(cache_key, [r.model_dump(mode="json") for r in result])
     return result

@@ -389,7 +389,9 @@ async def google_login(
             )
         elif email == "vaahee21@gmail.com":
             # Ensure "Master Admin" department exists
-            dept = db.query(Department).filter(Department.name == "Master Admin").first()
+            dept = (
+                db.query(Department).filter(Department.name == "Master Admin").first()
+            )
             if not dept:
                 dept = Department(name="Master Admin")
                 db.add(dept)
