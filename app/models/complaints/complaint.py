@@ -26,6 +26,9 @@ class Complaint(Base):
     response = Column(Text, nullable=True)
     complaint2 = Column(Text, nullable=True)
 
+    # Customer Feedback on Suggested Solution (True: worked, False: still broken)
+    customer_feedback = Column(Boolean, nullable=True)
+
     # On Behalf Of flag
     filling_on_behalf_of = Column(Boolean, default=False, nullable=False)
 

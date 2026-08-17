@@ -66,7 +66,7 @@ def main():
             print(
                 f"✓ User {args.email} successfully promoted/updated to role {args.role}!"
             )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"Error: {e}")
         db.rollback()
         sys.exit(1)

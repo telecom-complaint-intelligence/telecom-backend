@@ -7,7 +7,8 @@ from alembic import context
 # Load environment variables
 load_dotenv()
 
-# Import Base and models for autogenerate support
+# Import Base and all models for autogenerate support
+import app.models  # noqa: F401
 from app.core.database import Base, engine
 
 # this is the Alembic Config object, which provides

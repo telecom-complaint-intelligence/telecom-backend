@@ -28,6 +28,7 @@ class ComplaintAIAnalysis(Base):
     negativity_score = Column(Float, nullable=True)
     sentiment_score = Column(Float, nullable=True)
 
+    # Technical Information (Hybrid Extraction)
     component = Column(JSON, nullable=True)
     failure_type = Column(JSON, nullable=True)
     scope = Column(String(50), nullable=True)
@@ -35,7 +36,28 @@ class ComplaintAIAnalysis(Base):
     duration_hours = Column(Float, nullable=True)
     occurrence_pattern = Column(String(50), nullable=True)
 
-    solution_a = Column(Text, nullable=True)  # AI-suggested fix / action plan
+    # Solution Agent & High Agent outputs
+    solution_a = Column(
+        Text, nullable=True
+    )  # Initial/Customer-facing solution instructions
+    solution_high = Column(
+        Text, nullable=True
+    )  # High/Critical technical dispatch / engineering action plan
+    warnings = Column(
+        JSON, nullable=True
+    )  # Safety warnings for non-destructive actions
+    evidence = Column(JSON, nullable=True)  # Linked Knowledge Base evidence
+    confidence_score = Column(Float, nullable=True)  # Overall agent confidence
+
+    # High-Council Multi-Agent Reasoning & Escalation fields
+    diagnosis = Column(String(255), nullable=True)
+    root_cause = Column(Text, nullable=True)
+    risk_level = Column(String(50), nullable=True)
+    policy_status = Column(String(50), nullable=True)
+    final_decision = Column(String(100), nullable=True)
+    critic_feedback = Column(Text, nullable=True)
+    reasoning = Column(Text, nullable=True)
+
     extraction_source = Column(String(50), nullable=True)
     lowest_confidence = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

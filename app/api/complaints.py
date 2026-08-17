@@ -18,6 +18,7 @@ from app.models.user import User
 from app.schemas.complaints import (
     ComplaintAddressResponse,
     ComplaintCreate,
+    ComplaintFeedbackRequest,
     ComplaintResponse,
     ComplaintUpdate,
 )
@@ -64,6 +65,7 @@ def _build_complaint_response(complaint: Complaint, db: Session) -> ComplaintRes
         complaint1=complaint.complaint1,
         response=complaint.response,
         complaint2=complaint.complaint2,
+        customer_feedback=complaint.customer_feedback,
         filling_on_behalf_of=complaint.filling_on_behalf_of,
         status=complaint.status,
         category=complaint.category,
@@ -94,7 +96,7 @@ def _process_and_save_complaint(
             detail="Complaint text ('complaint') must be at least 5 characters.",
         )
 
-    # 1. Call telecom-ai-service microservice for AI features & priority classification
+    # 1. Call telecom-ai-service microservice for AI features, priority classification, and agent solutions
     ai_features = AIServiceClient.analyze_complaint(complaint_text)
 
     # 2. Extract user ID
@@ -102,9 +104,13 @@ def _process_and_save_complaint(
     ticket_num = payload.ticket_number or generate_ticket_number()
 
     # Determine initial AI / triage response
-    tech_info = ai_features.get("technical_information") or {}
-    solution_val = ai_features.get("solution_a") or ai_features.get("solution")
+    solution_val = (
+        ai_features.get("solution_a")
+        or ai_features.get("solution_high")
+        or ai_features.get("solution")
+    )
     if not solution_val:
+        tech_info = ai_features.get("technical_information") or {}
         comp_str = ", ".join(tech_info.get("component") or ["network equipment"])
         fail_str = ", ".join(tech_info.get("failure_type") or ["general issue"])
         solution_val = f"Automated Triage: Inspect {comp_str} for {fail_str} and verify service restoration."
@@ -116,6 +122,7 @@ def _process_and_save_complaint(
         complaint1=complaint_text,
         response=solution_val,
         complaint2=None,
+        customer_feedback=None,
         filling_on_behalf_of=payload.filling_on_behalf_of,
         status="OPEN",
         category=ai_features.get("category"),
@@ -136,6 +143,7 @@ def _process_and_save_complaint(
         db.add(db_addr)
 
     # 5. Create Table 3: AI Analysis (complaint_ai_analysis)
+    tech_info = ai_features.get("technical_information") or {}
     db_ai_analysis = ComplaintAIAnalysis(
         complaint_id=db_complaint.id,
         category_confidence=ai_features.get("category_confidence"),
@@ -147,7 +155,18 @@ def _process_and_save_complaint(
         service_impact=tech_info.get("service_impact"),
         duration_hours=tech_info.get("duration_hours"),
         occurrence_pattern=tech_info.get("occurrence_pattern"),
-        solution_a=solution_val,
+        solution_a=ai_features.get("solution_a") or solution_val,
+        solution_high=ai_features.get("solution_high"),
+        warnings=ai_features.get("warnings"),
+        evidence=ai_features.get("evidence"),
+        confidence_score=ai_features.get("confidence_score"),
+        diagnosis=ai_features.get("diagnosis"),
+        root_cause=ai_features.get("root_cause"),
+        risk_level=ai_features.get("risk_level"),
+        policy_status=ai_features.get("policy_status"),
+        final_decision=ai_features.get("final_decision"),
+        critic_feedback=ai_features.get("critic_feedback"),
+        reasoning=ai_features.get("decision_reason"),
         extraction_source=ai_features.get("extraction_source"),
         lowest_confidence=ai_features.get("lowest_confidence"),
     )
@@ -213,6 +232,122 @@ def create_my_complaint(
     return _process_and_save_complaint(payload, current_user, db)
 
 
+@router.get("/critical", response_model=list[ComplaintResponse])
+def get_critical_complaints(
+    db: Annotated[Session, Depends(get_db)],
+    skip: int = 0,
+    limit: int = 100,
+):
+    """
+    Dedicated Critical Complaints Feed.
+    Retrieves all CRITICAL priority tickets sorted strictly by total_complexity_score DESC.
+    """
+    complaints = (
+        db.query(Complaint)
+        .options(
+            joinedload(Complaint.complaint_address),
+            joinedload(Complaint.ai_analysis),
+            joinedload(Complaint.priority_scores),
+        )
+        .join(Complaint.priority_scores)
+        .filter(ComplaintPriorityScores.complexity == "CRITICAL")
+        .order_by(ComplaintPriorityScores.total_complexity_score.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+    return [_build_complaint_response(c, db) for c in complaints]
+
+
+@router.post("/{complaint_id}/feedback", response_model=ComplaintResponse)
+def submit_complaint_feedback(
+    complaint_id: str,
+    payload: ComplaintFeedbackRequest,
+    db: Annotated[Session, Depends(get_db)],
+):
+    """
+    Submit customer feedback on the suggested solution.
+    - customer_feedback = True: Solution worked -> Ticket marked RESOLVED.
+    - customer_feedback = False: Solution failed -> Escalates ticket via Escalation Agent & High Agent council.
+    """
+    complaint = (
+        db.query(Complaint)
+        .options(
+            joinedload(Complaint.complaint_address),
+            joinedload(Complaint.ai_analysis),
+            joinedload(Complaint.priority_scores),
+        )
+        .filter(Complaint.id == complaint_id)
+        .first()
+    )
+    if not complaint:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Complaint with ID '{complaint_id}' not found",
+        )
+
+    complaint.customer_feedback = payload.customer_feedback
+
+    if payload.customer_feedback:
+        # Solution worked!
+        complaint.status = "RESOLVED"
+        complaint.closing_time_stamp = datetime.now(UTC).replace(tzinfo=None)
+    else:
+        # Solution failed -> Escalate
+        complaint.status = "ESCALATED"
+
+        # Prepare context for escalation agent
+        tech_dict = {}
+        if complaint.ai_analysis:
+            tech_dict = {
+                "component": complaint.ai_analysis.component or ["unknown"],
+                "failure_type": complaint.ai_analysis.failure_type or ["unknown"],
+                "scope": complaint.ai_analysis.scope or "individual",
+                "duration_hours": complaint.ai_analysis.duration_hours or 24.0,
+            }
+
+        curr_complexity = (
+            complaint.priority_scores.complexity if complaint.priority_scores else "LOW"
+        )
+        esc_result = AIServiceClient.escalate_complaint(
+            complaint_text=complaint.complaint1,
+            previous_solution=complaint.response or "",
+            customer_feedback=False,
+            technical_information=tech_dict,
+            complexity=curr_complexity,
+            category=complaint.category or "General",
+        )
+
+        high_res = esc_result.get("high_agent_result") or {}
+        if high_res and complaint.ai_analysis:
+            complaint.ai_analysis.solution_high = high_res.get(
+                "solution_high"
+            ) or high_res.get("proposed_action")
+            complaint.ai_analysis.diagnosis = high_res.get("diagnosis")
+            complaint.ai_analysis.root_cause = high_res.get("root_cause")
+            complaint.ai_analysis.risk_level = high_res.get("risk_level")
+            complaint.ai_analysis.policy_status = high_res.get("policy_status")
+            complaint.ai_analysis.final_decision = high_res.get("final_decision")
+            complaint.ai_analysis.critic_feedback = high_res.get("critic_feedback")
+            complaint.ai_analysis.reasoning = esc_result.get("reasoning")
+
+            if high_res.get("solution_high"):
+                complaint.response = high_res.get("solution_high")
+
+    db.commit()
+    db.refresh(complaint)
+
+    # Invalidate cache
+    invalidate_cache(f"complaint:{complaint_id}")
+    if complaint.user_id:
+        invalidate_cache(f"user:{complaint.user_id}:complaints")
+    invalidate_cache("complaints:all*")
+
+    response_data = _build_complaint_response(complaint, db)
+    set_cached_data(f"complaint:{complaint_id}", response_data.model_dump(mode="json"))
+    return response_data
+
+
 @router.patch("/{complaint_id}", response_model=ComplaintResponse)
 def update_complaint(
     complaint_id: str,
@@ -221,9 +356,10 @@ def update_complaint(
 ):
     """
     Update ticket lifecycle:
-    - complaint2: follow-up complaint text / clarification.
+    - complaint2: follow-up customer complaint / clarification.
     - response: updated response or technician note.
-    - status: 'OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'.
+    - customer_feedback: True / False.
+    - status: 'OPEN', 'IN_PROGRESS', 'ESCALATED', 'RESOLVED', 'CLOSED'.
     - Auto-sets closing_time_stamp when marked RESOLVED or CLOSED.
     """
     complaint = (
@@ -246,12 +382,14 @@ def update_complaint(
         complaint.complaint2 = payload.complaint2
     if payload.response is not None:
         complaint.response = payload.response
+    if payload.customer_feedback is not None:
+        complaint.customer_feedback = payload.customer_feedback
     if payload.status is not None:
         complaint.status = payload.status
         if payload.status in ["RESOLVED", "CLOSED"]:
-            complaint.closing_time_stamp = payload.closing_time_stamp or datetime.now(
-                UTC
-            ).replace(tzinfo=None)
+            complaint.closing_time_stamp = payload.closing_time_stamp or (
+                datetime.now(UTC).replace(tzinfo=None)
+            )
 
     db.commit()
     db.refresh(complaint)
