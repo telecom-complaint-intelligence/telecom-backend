@@ -1,6 +1,29 @@
+import os
+
+# Force the database URL to be a temporary SQLite database for all tests
+os.environ["DATABASE_URL"] = "sqlite:///./test_telecom.db"
+
 import json
-import pytest
+
 import httpx
+import pytest
+
+from app.core.database import Base, engine
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_database():
+    # Create tables in the isolated test SQLite database
+    Base.metadata.create_all(bind=engine)
+    yield
+    # Clean up and remove the test database
+    Base.metadata.drop_all(bind=engine)
+    if os.path.exists("./test_telecom.db"):
+        try:
+            os.remove("./test_telecom.db")
+        except Exception:  # noqa: BLE001, S110
+            pass
+
 
 @pytest.fixture(autouse=True)
 def mock_ai_service(monkeypatch):
@@ -15,7 +38,7 @@ def mock_ai_service(monkeypatch):
 
             try:
                 body = json.loads(request.read().decode("utf-8"))
-            except Exception:
+            except Exception:  # noqa: BLE001
                 body = {}
 
             complaint_text = body.get("complaint", "")
@@ -49,20 +72,29 @@ def mock_ai_service(monkeypatch):
                     "final_decision": "DISPATCH_FIELD_TECH",
                     "critic_feedback": "Approved",
                     "solution_high": "Dispatch field technician for on-site check.",
-                    "confidence_score": 0.99
-                }
+                    "confidence_score": 0.99,
+                },
             }
 
             # Adjust complexity dynamically to pass the end-to-end tests
             if "junction box damaged" in complaint_text.lower():
                 response_json["complexity"] = "HIGH"
-                response_json["priority_scores"] = {"complexity": "HIGH", "total_complexity_score": 85.0}
+                response_json["priority_scores"] = {
+                    "complexity": "HIGH",
+                    "total_complexity_score": 85.0,
+                }
             elif "fiber optic cable cut" in complaint_text.lower():
                 response_json["complexity"] = "CRITICAL"
-                response_json["priority_scores"] = {"complexity": "CRITICAL", "total_complexity_score": 98.0}
+                response_json["priority_scores"] = {
+                    "complexity": "CRITICAL",
+                    "total_complexity_score": 98.0,
+                }
             else:
                 response_json["complexity"] = "LOW"
-                response_json["priority_scores"] = {"complexity": "LOW", "total_complexity_score": 15.0}
+                response_json["priority_scores"] = {
+                    "complexity": "LOW",
+                    "total_complexity_score": 15.0,
+                }
 
             mock_resp._content = json.dumps(response_json).encode("utf-8")
             return mock_resp
