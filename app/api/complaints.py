@@ -46,20 +46,28 @@ def _build_complaint_response(complaint: Complaint, db: Session) -> ComplaintRes
     """Helper to assemble ComplaintResponse and compute resolved_address dynamically."""
     # 1. Determine resolved address based on filling_on_behalf_of
     resolved_addr = None
+    cust_name = None
+    cust_phone = None
+
     if complaint.filling_on_behalf_of and complaint.complaint_address is not None:
         resolved_addr = ComplaintAddressResponse.model_validate(
             complaint.complaint_address
         )
-    elif complaint.user_id:
+
+    # Query user to fetch resolved address and profile contact info
+    if complaint.user_id:
         user = db.query(User).filter(User.id == complaint.user_id).first()
         if user and user.profile:
-            resolved_addr = ComplaintAddressResponse(
-                address=user.profile.address,
-                city=user.profile.city,
-                state=user.profile.state_val,
-                country=user.profile.country or "India",
-                zipcode=user.profile.zipcode,
-            )
+            cust_name = user.profile.name
+            cust_phone = user.profile.phone
+            if not resolved_addr:
+                resolved_addr = ComplaintAddressResponse(
+                    address=user.profile.address,
+                    city=user.profile.city,
+                    state=user.profile.state_val,
+                    country=user.profile.country or "India",
+                    zipcode=user.profile.zipcode,
+                )
 
     return ComplaintResponse(
         id=complaint.id,
@@ -74,6 +82,8 @@ def _build_complaint_response(complaint: Complaint, db: Session) -> ComplaintRes
         category=complaint.category,
         timestamp=complaint.timestamp,
         created_at=complaint.created_at,
+        response_timestamp=complaint.response_timestamp,
+        follow_up_timestamp=complaint.follow_up_timestamp,
         closing_time_stamp=complaint.closing_time_stamp,
         complaint_address=ComplaintAddressResponse.model_validate(
             complaint.complaint_address
@@ -83,9 +93,14 @@ def _build_complaint_response(complaint: Complaint, db: Session) -> ComplaintRes
         resolved_address=resolved_addr,
         ai_analysis=complaint.ai_analysis,
         priority_scores=complaint.priority_scores,
+<<<<<<< HEAD
         summary=ComplaintSummaryResponse.model_validate(complaint.summary)
         if complaint.summary
         else None,
+=======
+        customer_name=cust_name,
+        customer_phone=cust_phone,
+>>>>>>> 15ab2016883f646d5fae9f744618e277bd2ab65a
     )
 
 
@@ -132,6 +147,7 @@ def _process_and_save_complaint(
         filling_on_behalf_of=payload.filling_on_behalf_of,
         status="OPEN",
         category=ai_features.get("category"),
+        response_timestamp=datetime.now(UTC).replace(tzinfo=None),
     )
     db.add(db_complaint)
     db.flush()  # Generates db_complaint.id for foreign keys
@@ -352,7 +368,8 @@ def submit_complaint_feedback(
             complaint.ai_analysis.reasoning = esc_result.get("reasoning")
 
             if high_res.get("solution_high"):
-                complaint.response = high_res.get("solution_high")
+                # Save to AI Analysis but do not overwrite core complaint.response
+                complaint.ai_analysis.solution_high = high_res.get("solution_high")
 
     db.commit()
     db.refresh(complaint)
@@ -401,8 +418,14 @@ def update_complaint(
 
     if payload.complaint2 is not None:
         complaint.complaint2 = payload.complaint2
+        complaint.follow_up_timestamp = payload.follow_up_timestamp or (
+            datetime.now(UTC).replace(tzinfo=None)
+        )
     if payload.response is not None:
         complaint.response = payload.response
+        complaint.response_timestamp = payload.response_timestamp or (
+            datetime.now(UTC).replace(tzinfo=None)
+        )
     if payload.customer_feedback is not None:
         complaint.customer_feedback = payload.customer_feedback
     if payload.status is not None:
@@ -411,6 +434,8 @@ def update_complaint(
             complaint.closing_time_stamp = payload.closing_time_stamp or (
                 datetime.now(UTC).replace(tzinfo=None)
             )
+    if payload.resolved_by is not None:
+        complaint.resolved_by = payload.resolved_by
 
     db.commit()
     db.refresh(complaint)
@@ -451,6 +476,7 @@ def get_my_complaints(
             joinedload(Complaint.summary),
         )
         .filter(Complaint.user_id == current_user.id)
+        .order_by(Complaint.created_at.desc())
         .offset(skip)
         .limit(limit)
         .all()
@@ -495,7 +521,9 @@ def list_complaints(
             ComplaintPriorityScores.complexity == norm
         )
 
-    complaints = query.offset(skip).limit(limit).all()
+    complaints = (
+        query.order_by(Complaint.created_at.desc()).offset(skip).limit(limit).all()
+    )
     result = [_build_complaint_response(c, db) for c in complaints]
     set_cached_data(cache_key, [r.model_dump(mode="json") for r in result])
     return result
