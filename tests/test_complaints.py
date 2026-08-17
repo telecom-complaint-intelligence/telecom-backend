@@ -143,3 +143,58 @@ def test_list_complaints_with_complexity_filter():
     assert isinstance(data, list)
     for item in data:
         assert item["priority_scores"]["complexity"] == "CRITICAL"
+
+
+def test_get_critical_complaints_feed_sorted():
+    response = client.get("/api/v1/complaints/critical")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    scores = [item["priority_scores"]["total_complexity_score"] for item in data]
+    # Check sorted descending
+    assert scores == sorted(scores, reverse=True)
+
+
+def test_submit_complaint_feedback_true_resolves():
+    # 1. Create a complaint
+    payload = {"complaint1": "My wifi connection drops intermittently"}
+    create_resp = client.post("/api/v1/complaints", json=payload)
+    assert create_resp.status_code == 201
+    complaint_id = create_resp.json()["id"]
+
+    # 2. Submit Feedback True
+    fb_resp = client.post(
+        f"/api/v1/complaints/{complaint_id}/feedback",
+        json={"customer_feedback": True},
+    )
+    assert fb_resp.status_code == 200
+    data = fb_resp.json()
+    assert data["customer_feedback"] is True
+    assert data["status"] == "RESOLVED"
+    assert data["closing_time_stamp"] is not None
+
+
+def test_submit_complaint_feedback_false_escalates():
+    # 1. Create a complaint
+    payload = {
+        "complaint1": "Optical loss error LOS light blinking red continuously",
+        "filling_on_behalf_of": False,
+    }
+    create_resp = client.post("/api/v1/complaints", json=payload)
+    assert create_resp.status_code == 201
+    complaint_id = create_resp.json()["id"]
+
+    # 2. Submit Feedback False (solution didn't work)
+    fb_resp = client.post(
+        f"/api/v1/complaints/{complaint_id}/feedback",
+        json={"customer_feedback": False},
+    )
+    assert fb_resp.status_code == 200
+    data = fb_resp.json()
+    assert data["customer_feedback"] is False
+    assert data["status"] == "ESCALATED"
+    assert data["ai_analysis"] is not None
+    assert (
+        data["ai_analysis"]["solution_high"] is not None
+        or data["response"] is not None
+    )

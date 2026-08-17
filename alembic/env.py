@@ -7,7 +7,8 @@ from alembic import context
 # Load environment variables
 load_dotenv()
 
-# Import Base and models for autogenerate support
+# Import Base and all models for autogenerate support
+import app.models  # noqa: F401
 from app.core.database import Base, engine
 
 # this is the Alembic Config object, which provides
@@ -38,7 +39,9 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     with engine.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection, target_metadata=target_metadata
+        )
 
         with context.begin_transaction():
             context.run_migrations()

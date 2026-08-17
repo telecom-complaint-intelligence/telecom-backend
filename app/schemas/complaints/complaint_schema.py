@@ -1,5 +1,4 @@
 from datetime import datetime
-
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from app.schemas.complaints.address_schema import (
@@ -38,7 +37,9 @@ class ComplaintCreate(BaseModel):
     state: str | None = Field(
         None, description="Custom state (required only if on behalf of)"
     )
-    country: str | None = Field("India", description="Custom country (default: India)")
+    country: str | None = Field(
+        "India", description="Custom country (default: India)"
+    )
     zipcode: str | None = Field(
         None, description="Custom zipcode (required only if on behalf of)"
     )
@@ -48,11 +49,24 @@ class ComplaintUpdate(BaseModel):
     complaint2: str | None = Field(
         None, description="Follow-up customer complaint or clarification"
     )
-    response: str | None = Field(None, description="Updated AI/Agent triage response")
+    response: str | None = Field(
+        None, description="Updated AI/Agent triage response"
+    )
+    customer_feedback: bool | None = Field(
+        None,
+        description="True = solution worked, False = issue persisted / broken",
+    )
     status: str | None = Field(
-        None, description="OPEN | IN_PROGRESS | RESOLVED | CLOSED"
+        None, description="OPEN | IN_PROGRESS | ESCALATED | RESOLVED | CLOSED"
     )
     closing_time_stamp: datetime | None = None
+
+
+class ComplaintFeedbackRequest(BaseModel):
+    customer_feedback: bool = Field(
+        ...,
+        description="True if suggested solution resolved the issue; False if issue persists",
+    )
 
 
 class ComplaintResponse(BaseModel):
@@ -66,6 +80,9 @@ class ComplaintResponse(BaseModel):
     complaint1: str
     response: str | None = None
     complaint2: str | None = None
+
+    # Customer Feedback
+    customer_feedback: bool | None = None
 
     # On Behalf Of flag
     filling_on_behalf_of: bool = False

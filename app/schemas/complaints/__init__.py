@@ -5,6 +5,7 @@ from app.schemas.complaints.address_schema import (
 from app.schemas.complaints.ai_analysis_schema import AIAnalysisResponse
 from app.schemas.complaints.complaint_schema import (
     ComplaintCreate,
+    ComplaintFeedbackRequest,
     ComplaintResponse,
     ComplaintUpdate,
 )
@@ -15,6 +16,7 @@ __all__ = [
     "ComplaintAddressCreate",
     "ComplaintAddressResponse",
     "ComplaintCreate",
+    "ComplaintFeedbackRequest",
     "ComplaintResponse",
     "ComplaintUpdate",
     "PriorityScoresResponse",
