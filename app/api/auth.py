@@ -388,9 +388,17 @@ async def google_login(
                 email_verified=True,
             )
         elif email == "vaahee21@gmail.com":
+            # Ensure "Master Admin" department exists
+            dept = db.query(Department).filter(Department.name == "Master Admin").first()
+            if not dept:
+                dept = Department(name="Master Admin")
+                db.add(dept)
+                db.flush()
+
             db_user = User(
                 email=email,
                 role="client",
+                department_id=dept.id,
                 customer_id=generate_customer_id(db),
                 email_verified=True,
             )
