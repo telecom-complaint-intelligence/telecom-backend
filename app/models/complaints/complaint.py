@@ -1,3 +1,4 @@
+
 import uuid
 from datetime import datetime
 
@@ -34,10 +35,13 @@ class Complaint(Base):
 
     status = Column(String(50), default="OPEN", nullable=False)
     category = Column(String(100), nullable=True)
+    resolved_by = Column(String(50), nullable=True)
 
     # Timestamps
     timestamp = Column(DateTime, default=datetime.utcnow, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    response_timestamp = Column(DateTime, nullable=True)
+    follow_up_timestamp = Column(DateTime, nullable=True)
     closing_time_stamp = Column(DateTime, nullable=True)
 
     # 1-to-1 Relationships

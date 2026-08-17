@@ -56,7 +56,12 @@ class ComplaintUpdate(BaseModel):
     status: str | None = Field(
         None, description="OPEN | IN_PROGRESS | ESCALATED | RESOLVED | CLOSED"
     )
+    resolved_by: str | None = Field(
+        None, description="Operator ID who resolved the complaint"
+    )
     closing_time_stamp: datetime | None = None
+    response_timestamp: datetime | None = None
+    follow_up_timestamp: datetime | None = None
 
 
 class ComplaintFeedbackRequest(BaseModel):
@@ -86,10 +91,13 @@ class ComplaintResponse(BaseModel):
 
     status: str
     category: str | None = None
+    resolved_by: str | None = None
 
     # Timestamps
     timestamp: datetime | None = None
     created_at: datetime | None = None
+    response_timestamp: datetime | None = None
+    follow_up_timestamp: datetime | None = None
     closing_time_stamp: datetime | None = None
 
     # Address & Intelligence
@@ -97,3 +105,7 @@ class ComplaintResponse(BaseModel):
     resolved_address: ComplaintAddressResponse | None = None
     ai_analysis: AIAnalysisResponse | None = None
     priority_scores: PriorityScoresResponse | None = None
+
+    # Customer Profile details from User relation
+    customer_name: str | None = None
+    customer_phone: str | None = None
