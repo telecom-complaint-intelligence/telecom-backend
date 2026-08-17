@@ -1,6 +1,26 @@
+import os
+import sys
+
+# Force the database URL to be a temporary SQLite database for all tests
+os.environ["DATABASE_URL"] = "sqlite:///./test_telecom.db"
+
 import json
 import pytest
 import httpx
+from app.core.database import Base, engine
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_test_database():
+    # Create tables in the isolated test SQLite database
+    Base.metadata.create_all(bind=engine)
+    yield
+    # Clean up and remove the test database
+    Base.metadata.drop_all(bind=engine)
+    if os.path.exists("./test_telecom.db"):
+        try:
+            os.remove("./test_telecom.db")
+        except Exception:
+            pass
 
 @pytest.fixture(autouse=True)
 def mock_ai_service(monkeypatch):
