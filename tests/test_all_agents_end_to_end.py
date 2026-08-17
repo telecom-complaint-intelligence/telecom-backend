@@ -8,6 +8,7 @@ End-to-End Test Matrix in telecom-backend verifying all Agent tiers and Escalati
 """
 
 from fastapi.testclient import TestClient
+
 from app.main import app
 
 client = TestClient(app)
@@ -68,9 +69,7 @@ def test_4_critical_agent_backend_flow_and_feed():
     assert crit_resp.status_code == 200
     crit_list = crit_resp.json()
     assert len(crit_list) > 0
-    scores = [
-        item["priority_scores"]["total_complexity_score"] for item in crit_list
-    ]
+    scores = [item["priority_scores"]["total_complexity_score"] for item in crit_list]
     assert scores == sorted(scores, reverse=True)
 
 

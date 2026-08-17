@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+
 from app.main import app
 
 client = TestClient(app)
@@ -61,6 +62,4 @@ def test_proxy_ai_high():
     )
     assert response.status_code == 200
     data = response.json()
-    assert (
-        "diagnosis" in data or "proposed_action" in data or "priority" in data
-    )
+    assert "diagnosis" in data or "proposed_action" in data or "priority" in data

@@ -195,6 +195,5 @@ def test_submit_complaint_feedback_false_escalates():
     assert data["status"] == "ESCALATED"
     assert data["ai_analysis"] is not None
     assert (
-        data["ai_analysis"]["solution_high"] is not None
-        or data["response"] is not None
+        data["ai_analysis"]["solution_high"] is not None or data["response"] is not None
     )

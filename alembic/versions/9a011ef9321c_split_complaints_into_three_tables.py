@@ -35,7 +35,7 @@ def upgrade() -> None:
         ]:
             try:
                 batch_op.drop_column(col)
-            except Exception:
+            except Exception:  # noqa: BLE001, S110
                 pass
 
     # 2. Create complaint_ai_analysis table (including solution_a)

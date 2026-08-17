@@ -39,16 +39,11 @@ def generate_ticket_number() -> str:
     return f"TICK-{random.randint(100000, 999999)}"
 
 
-def _build_complaint_response(
-    complaint: Complaint, db: Session
-) -> ComplaintResponse:
+def _build_complaint_response(complaint: Complaint, db: Session) -> ComplaintResponse:
     """Helper to assemble ComplaintResponse and compute resolved_address dynamically."""
     # 1. Determine resolved address based on filling_on_behalf_of
     resolved_addr = None
-    if (
-        complaint.filling_on_behalf_of
-        and complaint.complaint_address is not None
-    ):
+    if complaint.filling_on_behalf_of and complaint.complaint_address is not None:
         resolved_addr = ComplaintAddressResponse.model_validate(
             complaint.complaint_address
         )
@@ -116,9 +111,7 @@ def _process_and_save_complaint(
     )
     if not solution_val:
         tech_info = ai_features.get("technical_information") or {}
-        comp_str = ", ".join(
-            tech_info.get("component") or ["network equipment"]
-        )
+        comp_str = ", ".join(tech_info.get("component") or ["network equipment"])
         fail_str = ", ".join(tech_info.get("failure_type") or ["general issue"])
         solution_val = f"Automated Triage: Inspect {comp_str} for {fail_str} and verify service restoration."
 
@@ -184,12 +177,8 @@ def _process_and_save_complaint(
         complaint_id=db_complaint.id,
         complexity=ai_features.get("complexity", "LOW"),
         complexity_score=ai_features.get("complexity_score", 0),
-        weighted_complexity_score=ai_features.get(
-            "weighted_complexity_score", 0.0
-        ),
-        weighted_negativity_score=ai_features.get(
-            "weighted_negativity_score", 0.0
-        ),
+        weighted_complexity_score=ai_features.get("weighted_complexity_score", 0.0),
+        weighted_negativity_score=ai_features.get("weighted_negativity_score", 0.0),
         total_complexity_score=ai_features.get("total_complexity_score", 0.0),
     )
     db.add(db_priority)
@@ -211,14 +200,10 @@ def _process_and_save_complaint(
     return response_data
 
 
-@router.post(
-    "", response_model=ComplaintResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("", response_model=ComplaintResponse, status_code=status.HTTP_201_CREATED)
 def create_complaint(
     payload: ComplaintCreate,
-    current_user: Annotated[
-        User | None, Depends(get_optional_current_user)
-    ] = None,
+    current_user: Annotated[User | None, Depends(get_optional_current_user)] = None,
     db: Annotated[Session, Depends(get_db)] = None,
 ):
     """
@@ -316,16 +301,13 @@ def submit_complaint_feedback(
         if complaint.ai_analysis:
             tech_dict = {
                 "component": complaint.ai_analysis.component or ["unknown"],
-                "failure_type": complaint.ai_analysis.failure_type
-                or ["unknown"],
+                "failure_type": complaint.ai_analysis.failure_type or ["unknown"],
                 "scope": complaint.ai_analysis.scope or "individual",
                 "duration_hours": complaint.ai_analysis.duration_hours or 24.0,
             }
 
         curr_complexity = (
-            complaint.priority_scores.complexity
-            if complaint.priority_scores
-            else "LOW"
+            complaint.priority_scores.complexity if complaint.priority_scores else "LOW"
         )
         esc_result = AIServiceClient.escalate_complaint(
             complaint_text=complaint.complaint1,
@@ -338,19 +320,15 @@ def submit_complaint_feedback(
 
         high_res = esc_result.get("high_agent_result") or {}
         if high_res and complaint.ai_analysis:
-            complaint.ai_analysis.solution_high = (
-                high_res.get("solution_high") or high_res.get("proposed_action")
-            )
+            complaint.ai_analysis.solution_high = high_res.get(
+                "solution_high"
+            ) or high_res.get("proposed_action")
             complaint.ai_analysis.diagnosis = high_res.get("diagnosis")
             complaint.ai_analysis.root_cause = high_res.get("root_cause")
             complaint.ai_analysis.risk_level = high_res.get("risk_level")
             complaint.ai_analysis.policy_status = high_res.get("policy_status")
-            complaint.ai_analysis.final_decision = high_res.get(
-                "final_decision"
-            )
-            complaint.ai_analysis.critic_feedback = high_res.get(
-                "critic_feedback"
-            )
+            complaint.ai_analysis.final_decision = high_res.get("final_decision")
+            complaint.ai_analysis.critic_feedback = high_res.get("critic_feedback")
             complaint.ai_analysis.reasoning = esc_result.get("reasoning")
 
             if high_res.get("solution_high"):
@@ -366,9 +344,7 @@ def submit_complaint_feedback(
     invalidate_cache("complaints:all*")
 
     response_data = _build_complaint_response(complaint, db)
-    set_cached_data(
-        f"complaint:{complaint_id}", response_data.model_dump(mode="json")
-    )
+    set_cached_data(f"complaint:{complaint_id}", response_data.model_dump(mode="json"))
     return response_data
 
 
@@ -425,9 +401,7 @@ def update_complaint(
     invalidate_cache("complaints:all*")
 
     response_data = _build_complaint_response(complaint, db)
-    set_cached_data(
-        f"complaint:{complaint_id}", response_data.model_dump(mode="json")
-    )
+    set_cached_data(f"complaint:{complaint_id}", response_data.model_dump(mode="json"))
     return response_data
 
 

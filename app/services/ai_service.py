@@ -1,13 +1,12 @@
 import os
 from typing import Any
+
 import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
 
-AI_SERVICE_URL = os.getenv(
-    "AI_SERVICE_URL", "http://localhost:8001/api/v1/analyze"
-)
+AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://localhost:8001/api/v1/analyze")
 AI_ESCALATE_URL = os.getenv(
     "AI_ESCALATE_URL", "http://localhost:8001/api/v1/agents/escalate"
 )
@@ -100,7 +99,7 @@ class AIServiceClient:
                 response = client.post(AI_ESCALATE_URL, json=payload)
                 if response.status_code == 200:
                     return response.json()
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"Notice: Escalation Agent API call failed: {e}")
 
         # Local fallback escalation

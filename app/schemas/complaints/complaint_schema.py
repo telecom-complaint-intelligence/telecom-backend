@@ -1,4 +1,5 @@
 from datetime import datetime
+
 from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 from app.schemas.complaints.address_schema import (
@@ -37,9 +38,7 @@ class ComplaintCreate(BaseModel):
     state: str | None = Field(
         None, description="Custom state (required only if on behalf of)"
     )
-    country: str | None = Field(
-        "India", description="Custom country (default: India)"
-    )
+    country: str | None = Field("India", description="Custom country (default: India)")
     zipcode: str | None = Field(
         None, description="Custom zipcode (required only if on behalf of)"
     )
@@ -49,9 +48,7 @@ class ComplaintUpdate(BaseModel):
     complaint2: str | None = Field(
         None, description="Follow-up customer complaint or clarification"
     )
-    response: str | None = Field(
-        None, description="Updated AI/Agent triage response"
-    )
+    response: str | None = Field(None, description="Updated AI/Agent triage response")
     customer_feedback: bool | None = Field(
         None,
         description="True = solution worked, False = issue persisted / broken",
