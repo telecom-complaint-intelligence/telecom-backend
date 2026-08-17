@@ -451,6 +451,7 @@ def get_my_complaints(
             joinedload(Complaint.priority_scores),
         )
         .filter(Complaint.user_id == current_user.id)
+        .order_by(Complaint.created_at.desc())
         .offset(skip)
         .limit(limit)
         .all()
@@ -494,7 +495,7 @@ def list_complaints(
             ComplaintPriorityScores.complexity == norm
         )
 
-    complaints = query.offset(skip).limit(limit).all()
+    complaints = query.order_by(Complaint.created_at.desc()).offset(skip).limit(limit).all()
     result = [_build_complaint_response(c, db) for c in complaints]
     set_cached_data(cache_key, [r.model_dump(mode="json") for r in result])
     return result
