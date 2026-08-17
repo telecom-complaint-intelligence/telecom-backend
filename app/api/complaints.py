@@ -345,7 +345,8 @@ def submit_complaint_feedback(
             complaint.ai_analysis.reasoning = esc_result.get("reasoning")
 
             if high_res.get("solution_high"):
-                complaint.response = high_res.get("solution_high")
+                # Save to AI Analysis but do not overwrite core complaint.response
+                complaint.ai_analysis.solution_high = high_res.get("solution_high")
 
     db.commit()
     db.refresh(complaint)

@@ -2,7 +2,7 @@ import httpx
 import json
 
 url = "http://localhost:8001/api/v1/analyze"
-payload = {"complaint": "Tower is not burning!!!"}
+payload = {"complaint": "Network Tower Is Burning!!!!"}
 
 try:
     with httpx.Client(timeout=10.0) as client:
