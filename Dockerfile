@@ -1,44 +1,64 @@
-# Use a lightweight Python base image
+# =============================================================================
+# Telecom Backend — Production Dockerfile
+# FastAPI + uv | Python 3.11 Slim | Alembic Migrations
+# =============================================================================
+
+# Stage 1: Dependency resolution & build
 FROM python:3.11-slim AS builder
 
-# Install uv
+# Install uv from official image
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Set working directory
 WORKDIR /app
 
-# Copy project files
+# Copy lock files first for Docker layer caching
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies (without compiling/installing the project pkg itself)
+# Install production dependencies only (no dev)
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-install-project --no-dev
 
-# Copy the application source code
+# Copy application source
 COPY app ./app
 
-# Install the project
+# Install the project itself into the venv
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
-# Final runtime stage
-FROM python:3.11-slim
+# =============================================================================
+# Stage 2: Minimal production runtime
+# =============================================================================
+FROM python:3.11-slim AS runner
 
 WORKDIR /app
 
-# Copy virtual environment, app code, alembic migrations, and startup script
+# Create non-root user for security
+RUN groupadd --system appgroup && \
+    useradd --system --gid appgroup --no-create-home appuser
+
+# Copy virtual environment and app artifacts from builder
 COPY --from=builder /app/.venv /app/.venv
-COPY app ./app
+COPY --from=builder /app/app ./app
+
+# Copy Alembic migrations and startup script
 COPY alembic ./alembic
 COPY alembic.ini ./alembic.ini
 COPY start.sh ./start.sh
 
-# Make start.sh executable
-RUN chmod +x start.sh
+RUN chmod +x ./start.sh
 
-# Use the virtual environment
+# Use the virtualenv binaries
 ENV PATH="/app/.venv/bin:$PATH"
 
+# Runtime environment defaults (override via --env-file or cloud secret injection)
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+USER appuser
+
 EXPOSE 8000
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+  CMD python -c "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()" || exit 1
 
 CMD ["./start.sh"]
