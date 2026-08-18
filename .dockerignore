@@ -1,0 +1,35 @@
+# Virtual environments & build artifacts
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Local dev & test
+.env
+.env.*
+!.env.example
+tests/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Git
+.git/
+.gitignore
+.github/
+
+# OS
+.DS_Store
+*.log
+
+# Docs
+*.md
+docs/
+
+# SQLite (dev only)
+*.db
