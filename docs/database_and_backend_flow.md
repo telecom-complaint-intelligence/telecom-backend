@@ -10,6 +10,15 @@ The database is built using SQLAlchemy and PostgreSQL, adhering to 3NF normaliza
 
 ```mermaid
 erDiagram
+    users ||--|| profiles : "one-to-one (user_id)"
+    users ||--|| service_details : "one-to-one (user_id)"
+    users ||--o| departments : "many-to-one (department_id)"
+    users ||--o{ complaints : "one-to-many (user_id)"
+    client_invitations ||--o| departments : "many-to-one (department_id)"
+    complaints ||--o| complaint_address : "one-to-one (complaint_id)"
+    complaints ||--|| complaint_ai_analysis : "one-to-one (complaint_id)"
+    complaints ||--|| complaint_priority_scores : "one-to-one (complaint_id)"
+
     users {
         VARCHAR(36) id PK
         VARCHAR(50) customer_id UK
@@ -62,11 +71,71 @@ erDiagram
         TIMESTAMP created_at
         TIMESTAMP expires_at
     }
-
-    users ||--|| profiles : "one-to-one (user_id)"
-    users ||--|| service_details : "one-to-one (user_id)"
-    users ||--o| departments : "many-to-one (department_id)"
-    client_invitations ||--o| departments : "many-to-one (department_id)"
+    complaints {
+        VARCHAR(36) id PK
+        VARCHAR(50) ticket_number UK
+        VARCHAR(36) user_id FK
+        TEXT complaint1
+        TEXT response
+        TEXT complaint2
+        BOOLEAN customer_feedback
+        BOOLEAN filling_on_behalf_of
+        VARCHAR(50) status
+        VARCHAR(100) category
+        VARCHAR(50) resolved_by
+        TIMESTAMP timestamp
+        TIMESTAMP created_at
+        TIMESTAMP response_timestamp
+        TIMESTAMP follow_up_timestamp
+        TIMESTAMP closing_time_stamp
+    }
+    complaint_address {
+        VARCHAR(36) id PK
+        VARCHAR(36) complaint_id FK
+        TEXT address
+        VARCHAR(100) city
+        VARCHAR(100) state
+        VARCHAR(100) country
+        VARCHAR(20) zipcode
+    }
+    complaint_ai_analysis {
+        VARCHAR(36) id PK
+        VARCHAR(36) complaint_id FK
+        FLOAT category_confidence
+        FLOAT negativity_score
+        FLOAT sentiment_score
+        JSON component
+        JSON failure_type
+        VARCHAR(50) scope
+        VARCHAR(50) service_impact
+        FLOAT duration_hours
+        VARCHAR(50) occurrence_pattern
+        TEXT solution_a
+        TEXT solution_high
+        JSON warnings
+        JSON evidence
+        FLOAT confidence_score
+        VARCHAR(255) diagnosis
+        TEXT root_cause
+        VARCHAR(50) risk_level
+        VARCHAR(50) policy_status
+        VARCHAR(100) final_decision
+        TEXT critic_feedback
+        TEXT reasoning
+        VARCHAR(50) extraction_source
+        FLOAT lowest_confidence
+        TIMESTAMP created_at
+    }
+    complaint_priority_scores {
+        VARCHAR(36) id PK
+        VARCHAR(36) complaint_id FK
+        VARCHAR(50) complexity
+        INTEGER complexity_score
+        FLOAT weighted_complexity_score
+        FLOAT weighted_negativity_score
+        FLOAT total_complexity_score
+        TIMESTAMP created_at
+    }
 ```
 
 ### Table 1: `users` (Core Auth & Settings)
@@ -123,6 +192,77 @@ Tracks invited staff operators, passwords, and validation tokens.
 * `token` (VARCHAR, UK, Not Null): Unique secure activation token.
 * `is_activated` (BOOLEAN, Not Null, Default `False`): Activation toggle.
 * `department_id` (VARCHAR(36), FK): Target department reference.
+* `created_at` (TIMESTAMP, Not Null): Invitation timestamp.
+* `expires_at` (TIMESTAMP, Nullable): Token expiration timestamp.
+
+### Table 6: `complaints` (Customer Tickets)
+Stores primary customer issue reports, statuses, and follow-ups.
+* `id` (VARCHAR(36), PK): Unique ticket UUID.
+* `ticket_number` (VARCHAR(50), UK): Public tracking number.
+* `user_id` (VARCHAR(36), FK): References user who submitted the ticket.
+* `complaint1` (TEXT, Not Null): First complaint description text.
+* `response` (TEXT, Nullable): Action/Proposed solution text from technicians.
+* `complaint2` (TEXT, Nullable): Follow-up complaint text from customer.
+* `customer_feedback` (BOOLEAN, Nullable): Confirmation of whether the proposed solution worked.
+* `filling_on_behalf_of` (BOOLEAN, Not Null, Default `False`): Toggles custom address override.
+* `status` (VARCHAR(50), Not Null, Default `"OPEN"`): Ticket lifecycle status (`OPEN`, `IN_PROGRESS`, `RESOLVED`, `CLOSED`).
+* `category` (VARCHAR(100), Nullable): AI classified complaint category.
+* `resolved_by` (VARCHAR(50), Nullable): Team member or agent who resolved the issue.
+* `timestamp` (TIMESTAMP, Not Null): Submission time.
+* `created_at` (TIMESTAMP, Not Null): Creation timestamp.
+* `response_timestamp` (TIMESTAMP, Nullable): Proposed solution timestamp.
+* `follow_up_timestamp` (TIMESTAMP, Nullable): Follow-up submission timestamp.
+* `closing_time_stamp` (TIMESTAMP, Nullable): Resolved/Closed timestamp.
+
+### Table 7: `complaint_address` (Custom Installation Locations)
+Stores custom installation location details when a complaint is filed on behalf of someone else.
+* `id` (VARCHAR(36), PK): Address UUID.
+* `complaint_id` (VARCHAR(36), FK, UK): References parent complaint.
+* `address` (TEXT, Nullable): Installation address.
+* `city` (VARCHAR(100), Nullable): City.
+* `state` (VARCHAR(100), Nullable): State.
+* `country` (VARCHAR(100), Not Null, Default `"India"`): Country.
+* `zipcode` (VARCHAR(20), Nullable): Postal code.
+
+### Table 8: `complaint_ai_analysis` (AI Triage & Reasoning Logs)
+Stores ML/NLP model classifications, confidence scores, technical extraction parameters, and multi-agent reasoning.
+* `id` (VARCHAR(36), PK): Analysis UUID.
+* `complaint_id` (VARCHAR(36), FK, UK): References parent complaint.
+* `category_confidence` (FLOAT, Nullable): Classification confidence.
+* `negativity_score` (FLOAT, Nullable): 0 to 1 negativity index.
+* `sentiment_score` (FLOAT, Nullable): 0 to 100 sentiment score.
+* `component` (JSON, Nullable): Technical system component(s) involved.
+* `failure_type` (JSON, Nullable): Extracted technical issue failure types.
+* `scope` (VARCHAR(50), Nullable): Outage scale scope (`Individual`, `Neighborhood`, etc.).
+* `service_impact` (VARCHAR(50), Nullable): Impact levels (`No Service`, `Degraded Service`).
+* `duration_hours` (FLOAT, Nullable): Outage duration.
+* `occurrence_pattern` (VARCHAR(50), Nullable): Occurrence logs (`Intermittent`, `Continuous`).
+* `solution_a` (TEXT, Nullable): Customer troubleshooting instructions.
+* `solution_high` (TEXT, Nullable): Dispatch technician field instructions.
+* `warnings` (JSON, Nullable): Core safety/precautionary actions.
+* `evidence` (JSON, Nullable): Matched Knowledge Base evidence logs.
+* `confidence_score` (FLOAT, Nullable): Global model confidence score.
+* `diagnosis` (VARCHAR(255), Nullable): Consensus diagnosis log.
+* `root_cause` (TEXT, Nullable): Consensus root cause.
+* `risk_level` (VARCHAR(50), Nullable): Operation risk level.
+* `policy_status` (VARCHAR(50), Nullable): Compliance status.
+* `final_decision` (VARCHAR(100), Nullable): Consensus final action.
+* `critic_feedback` (TEXT, Nullable): Multi-agent feedback review.
+* `reasoning` (TEXT, Nullable): Complete step-by-step reasoning trace.
+* `extraction_source` (VARCHAR(50), Nullable): Processing source engine.
+* `lowest_confidence` (FLOAT, Nullable): Configured confidence floor constraint.
+* `created_at` (TIMESTAMP, Not Null): Creation timestamp.
+
+### Table 9: `complaint_priority_scores` (Priority Calculation Metrics)
+Stores the calculated complexity ratings and priority scores of a complaint.
+* `id` (VARCHAR(36), PK): Score record UUID.
+* `complaint_id` (VARCHAR(36), FK, UK): References parent complaint.
+* `complexity` (VARCHAR(50), Not Null): Final priority tier (`LOW`, `MEDIUM`, `HIGH`, `CRITICAL`).
+* `complexity_score` (INTEGER, Not Null): Raw complexity rating.
+* `weighted_complexity_score` (FLOAT, Not Null): Weighted technical complexity (85%).
+* `weighted_negativity_score` (FLOAT, Not Null): Weighted negativity sentiment (15%).
+* `total_complexity_score` (FLOAT, Not Null): Final composite priority score (0-100).
+* `created_at` (TIMESTAMP, Not Null): Creation timestamp.
 
 ---
 
