@@ -231,3 +231,37 @@ Rather than deleting rows directly, resources utilize the `is_archived` column:
 * **Key Patterns**: Cached lists are stored in Redis under keys `telu:departments` and `telu:operators:{email}`.
 * **Invalidation**: Mutating routes (update, create, delete) automatically trigger invalidation of cache patterns (`telu:operators:*` and `telu:departments`).
 * **Resilience**: Redis operations run inside try-catch blocks. If a Redis connection is timed out or unavailable, the backend continues to query the database.
+
+---
+
+## 5. Database Connectivity & Fallback Architecture
+
+The diagram below details how the FastAPI backend establishes connections to the database engine and caching services, including the fail-safe fallbacks for local SQLite and direct DB queries when PostgreSQL or Redis is unreachable.
+
+```mermaid
+flowchart TD
+    FastAPI[FastAPI Application App/Main] --> InitDB[Init Database Engine app.core.database]
+    InitDB --> EnvCheck{DATABASE_URL starts with 'sqlite'? }
+    
+    EnvCheck -- Yes --> ConnectSQLite[Connect SQLite database]
+    EnvCheck -- No --> ConnectPG[Try connecting PostgreSQL]
+    
+    ConnectPG -- Connection Success --> UsePG[Use PostgreSQL Engine :5433]
+    ConnectPG -- Connection Failure --> FallbackSQLite[Use Fallback Local SQLite]
+    
+    ConnectSQLite --> SQLiteDB[(SQLite DB file: telecom_backend.db)]
+    FallbackSQLite --> SQLiteDB
+    UsePG --> PostgreSQLDB[(PostgreSQL Database)]
+
+    FastAPI --> InitRedis[Init Redis Client app.core.redis]
+    InitRedis --> RedisTry{Connect to Redis?}
+    RedisTry -- Success --> CacheActive[Redis Cache Enabled :6379]
+    RedisTry -- Failure/Timeout --> CacheInactive[Disable Redis Caching]
+    
+    CacheActive --> RedisStore[(Redis DB 0)]
+    CacheInactive --> DirectDBFallback[Fallback to Direct DB Queries]
+
+    Alembic[Alembic Migrations] --> ConnectPG
+    Alembic --> ConnectSQLite
+```
+
